@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "970813086875",
+    "project_id": "apex-gym-system",
+    "storage_bucket": "apex-gym-system.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:970813086875:android:ee4a445d3eaa35c9ab7a3e",
+        "android_client_info": {
+          "package_name": "com.example.apex_gym_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtZRYVJE7ECqAo2iGZ59-x6gwSujDgZb8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
