@@ -12,7 +12,7 @@ final recentCheckinsProvider = StreamProvider<List<CheckIn>>((ref) {
       .map((snap) => snap.docs.map(CheckIn.fromFirestore).toList());
 });
 
-/// Adds a new check-in and increments occupancy.
+/// Adds a new check-in and increments occupancy in a single transaction.
 Future<void> addCheckIn({
   required String memberId,
   required String name,
@@ -20,15 +20,34 @@ Future<void> addCheckIn({
   required String plan,
 }) async {
   final db = FirebaseFirestore.instance;
-  await db.collection('checkins').add({
-    'memberId': memberId,
-    'name': name,
-    'time': Timestamp.now(),
-    'method': method,
-    'plan': plan,
-  });
-  // increment occupancy
-  await db.doc('occupancy/current').update({
-    'count': FieldValue.increment(1),
-  });
+  final occupancyRef = db.doc('occupancy/current');
+  final checkinRef = db.collection('checkins').doc();
+
+  try {
+    await db.runTransaction((transaction) async {
+      final occupancySnap = await transaction.get(occupancyRef);
+      final occupancyData = occupancySnap.data();
+      final currentCount = (occupancyData?['count'] ?? 0).toInt();
+
+      transaction.set(checkinRef, {
+        'memberId': memberId,
+        'name': name,
+        'time': Timestamp.now(),
+        'method': method,
+        'plan': plan,
+      });
+
+      transaction.set(
+        occupancyRef,
+        {'count': currentCount + 1},
+        SetOptions(merge: true),
+      );
+    });
+  } on FirebaseException catch (error) {
+    throw StateError(
+      'Check-in transaction failed: ${error.message ?? error.code}',
+    );
+  } catch (_) {
+    throw StateError('Check-in transaction failed. Please try again.');
+  }
 }

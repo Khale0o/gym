@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
@@ -23,7 +24,36 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  bool _seeded = false;
+  bool _seedLoading = false;
+  String? _seedMessage;
+
+  Future<void> _runDemoSeed() async {
+    if (!kDebugMode || _seedLoading) return;
+
+    setState(() {
+      _seedLoading = true;
+      _seedMessage = null;
+    });
+
+    try {
+      await seedFirestore();
+      if (!mounted) return;
+      setState(() {
+        _seedMessage = 'Demo data seeded successfully.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _seedMessage = 'Demo seed failed: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _seedLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,11 +67,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         loading: () => const Center(child: CircularProgressIndicator(color: gold)),
         error: (e, _) => Center(child: ApexText('Error: $e', color: redAlert)),
         data: (members) {
-          if (members.isEmpty && !_seeded) {
-            _seeded = true;
-            Future.microtask(() async => seedFirestore());
-          }
-
           return LayoutBuilder(
             builder: (context, constraints) {
               final isMobile = constraints.maxWidth < 700;
@@ -52,17 +77,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // الهيدر
-                    _Header(),
+                    _Header(
+                      showDebugSeed: kDebugMode && members.isEmpty,
+                      seedLoading: _seedLoading,
+                      seedMessage: _seedMessage,
+                      onSeedPressed: _runDemoSeed,
+                    ),
                     const SizedBox(height: 24),
-
-                    // KPI – متجاوبة
                     _KpiRow(members: members, compact: isMobile, wide: isWide),
                     const SizedBox(height: 24),
-
-                    // صف الإشغال والمخطط الأسبوعي
+                    if (members.isEmpty) ...[
+                      _EmptyMembersState(
+                        showDebugSeed: kDebugMode,
+                        seedLoading: _seedLoading,
+                        seedMessage: _seedMessage,
+                        onSeedPressed: _runDemoSeed,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     if (isMobile) ...[
-                      // في الموبايل: عمودي
                       _OccupancySection(occupancyAsync: occupancyAsync),
                       const SizedBox(height: 16),
                       _WeeklyChart(),
@@ -71,11 +104,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       const SizedBox(height: 16),
                       _LiveCheckins(checkins: checkinsAsync),
                     ] else ...[
-                      // سطح المكتب: صفين جانبيين
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(flex: 3, child: _OccupancySection(occupancyAsync: occupancyAsync)),
+                          Expanded(
+                            flex: 3,
+                            child: _OccupancySection(occupancyAsync: occupancyAsync),
+                          ),
                           const SizedBox(width: 16),
                           Expanded(flex: 2, child: _WeeklyChart()),
                         ],
@@ -101,44 +136,193 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-// ── الهيدر ──
 class _Header extends StatelessWidget {
+  final bool showDebugSeed;
+  final bool seedLoading;
+  final String? seedMessage;
+  final VoidCallback onSeedPressed;
+
+  const _Header({
+    required this.showDebugSeed,
+    required this.seedLoading,
+    required this.seedMessage,
+    required this.onSeedPressed,
+  });
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final greeting = now.hour < 12 ? 'Good Morning' : now.hour < 18 ? 'Good Afternoon' : 'Good Evening';
-    return Row(
+    final greeting = now.hour < 12
+        ? 'Good Morning'
+        : now.hour < 18
+            ? 'Good Afternoon'
+            : 'Good Evening';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GoldHeading('$greeting, Admin', fontSize: 20),
-              const SizedBox(height: 4),
-              ApexText(
-                DateFormat('EEEE, d MMMM yyyy').format(now),
-                fontSize: 12,
-                color: const Color(0xFF555555),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GoldHeading('$greeting, Admin', fontSize: 20),
+                  const SizedBox(height: 4),
+                  ApexText(
+                    DateFormat('EEEE, d MMMM yyyy').format(now),
+                    fontSize: 12,
+                    color: const Color(0xFF555555),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: greenSuccess.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: greenSuccess.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: const [
+                  _PulseDot(),
+                  SizedBox(width: 6),
+                  ApexText(
+                    'Live',
+                    fontSize: 11,
+                    color: greenSuccess,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: greenSuccess.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: greenSuccess.withOpacity(0.2)),
+        if (showDebugSeed) ...[
+          const SizedBox(height: 16),
+          _DebugSeedBanner(
+            seedLoading: seedLoading,
+            seedMessage: seedMessage,
+            onSeedPressed: onSeedPressed,
           ),
-          child: Row(
-            children: const [
-              _PulseDot(),
-              SizedBox(width: 6),
-              ApexText('Live', fontSize: 11, color: greenSuccess, fontWeight: FontWeight.w600),
-            ],
-          ),
-        ),
+        ],
       ],
+    );
+  }
+}
+
+class _DebugSeedBanner extends StatelessWidget {
+  final bool seedLoading;
+  final String? seedMessage;
+  final VoidCallback onSeedPressed;
+
+  const _DebugSeedBanner({
+    required this.seedLoading,
+    required this.seedMessage,
+    required this.onSeedPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: orangeWarning.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: orangeWarning.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.developer_mode_rounded, color: orangeWarning, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ApexText(
+                  'Development / Demo Seeding',
+                  fontSize: 12,
+                  color: orangeWarning,
+                  fontWeight: FontWeight.w700,
+                ),
+                const SizedBox(height: 4),
+                ApexText(
+                  seedMessage ??
+                      'No members were found. Demo seeding is manual only and available in debug mode.',
+                  fontSize: 11,
+                  color: const Color(0xFFBBBBBB),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: seedLoading ? null : onSeedPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: orangeWarning,
+              foregroundColor: Colors.black,
+            ),
+            child: seedLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.black,
+                    ),
+                  )
+                : const Text('Seed Demo Data'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyMembersState extends StatelessWidget {
+  final bool showDebugSeed;
+  final bool seedLoading;
+  final String? seedMessage;
+  final VoidCallback onSeedPressed;
+
+  const _EmptyMembersState({
+    required this.showDebugSeed,
+    required this.seedLoading,
+    required this.seedMessage,
+    required this.onSeedPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const GoldHeading('No Member Data Yet'),
+          const SizedBox(height: 10),
+          const ApexText(
+            'The dashboard is connected, but no members are currently available in Firestore.',
+            fontSize: 12,
+            color: Color(0xFF888888),
+          ),
+          const SizedBox(height: 8),
+          const ApexText(
+            'Opening this screen no longer writes demo data automatically.',
+            fontSize: 11,
+            color: Color(0xFF555555),
+          ),
+          if (showDebugSeed) ...[
+            const SizedBox(height: 14),
+            _DebugSeedBanner(
+              seedLoading: seedLoading,
+              seedMessage: seedMessage,
+              onSeedPressed: onSeedPressed,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -150,16 +334,24 @@ class _PulseDot extends StatefulWidget {
 }
 
 class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat(reverse: true);
-  late final Animation<double> _anim = Tween<double>(begin: 0.4, end: 1.0).animate(_ctrl);
+  late final AnimationController _ctrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
+        ..repeat(reverse: true);
+  late final Animation<double> _anim =
+      Tween<double>(begin: 0.4, end: 1.0).animate(_ctrl);
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _anim,
       builder: (_, __) => Container(
-        width: 7, height: 7,
+        width: 7,
+        height: 7,
         decoration: BoxDecoration(
           color: greenSuccess.withOpacity(_anim.value),
           shape: BoxShape.circle,
@@ -169,7 +361,6 @@ class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixi
   }
 }
 
-// ── KPI Cards ──
 class _KpiCard extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -177,7 +368,14 @@ class _KpiCard extends StatelessWidget {
   final String delta;
   final bool positive;
   final Color iconColor;
-  const _KpiCard({required this.icon, required this.label, required this.value, required this.delta, required this.positive, required this.iconColor});
+  const _KpiCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.delta,
+    required this.positive,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -189,15 +387,27 @@ class _KpiCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(color: iconColor.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Icon(icon, color: iconColor, size: 18),
               ),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(color: deltaColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                child: ApexText(delta, fontSize: 10, color: deltaColor, fontWeight: FontWeight.w600),
+                decoration: BoxDecoration(
+                  color: deltaColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: ApexText(
+                  delta,
+                  fontSize: 10,
+                  color: deltaColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -213,7 +423,7 @@ class _KpiCard extends StatelessWidget {
 
 class _KpiRow extends StatelessWidget {
   final List members;
-  final bool compact; // mobile
+  final bool compact;
   final bool wide;
   const _KpiRow({required this.members, this.compact = false, this.wide = true});
 
@@ -229,16 +439,43 @@ class _KpiRow extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: const [
-        _KpiCard(icon: Icons.people_rounded, label: 'Active Members', value: '142', delta: '▲ 12%', positive: true, iconColor: blueInfo),
-        _KpiCard(icon: Icons.payments_rounded, label: 'Today Revenue', value: '4,280 EGP', delta: '▲ 8%', positive: true, iconColor: gold),
-        _KpiCard(icon: Icons.fitness_center_rounded, label: 'Sessions Today', value: '34', delta: '▼ 5%', positive: false, iconColor: orangeWarning),
-        _KpiCard(icon: Icons.autorenew_rounded, label: 'Renewals Due', value: '15', delta: '● Today', positive: true, iconColor: greenSuccess),
+        _KpiCard(
+          icon: Icons.people_rounded,
+          label: 'Active Members',
+          value: '142',
+          delta: '▲ 12%',
+          positive: true,
+          iconColor: blueInfo,
+        ),
+        _KpiCard(
+          icon: Icons.payments_rounded,
+          label: 'Today Revenue',
+          value: '4,280 EGP',
+          delta: '▲ 8%',
+          positive: true,
+          iconColor: gold,
+        ),
+        _KpiCard(
+          icon: Icons.fitness_center_rounded,
+          label: 'Sessions Today',
+          value: '34',
+          delta: '▼ 5%',
+          positive: false,
+          iconColor: orangeWarning,
+        ),
+        _KpiCard(
+          icon: Icons.autorenew_rounded,
+          label: 'Renewals Due',
+          value: '15',
+          delta: '● Today',
+          positive: true,
+          iconColor: greenSuccess,
+        ),
       ],
     );
   }
 }
 
-// ── قسم الإشغال ──
 class _OccupancySection extends ConsumerStatefulWidget {
   final AsyncValue<double> occupancyAsync;
   const _OccupancySection({required this.occupancyAsync});
@@ -277,7 +514,9 @@ class _OccupancySectionState extends ConsumerState<_OccupancySection> {
                   const SizedBox(height: 6),
                   Slider(
                     value: count.clamp(0, gymCapacity.toDouble()),
-                    min: 0, max: gymCapacity.toDouble(), divisions: gymCapacity,
+                    min: 0,
+                    max: gymCapacity.toDouble(),
+                    divisions: gymCapacity,
                     activeColor: ocColor(pct),
                     inactiveColor: borderDark,
                     onChanged: (v) => updateOccupancy(v),
@@ -319,7 +558,12 @@ class _StatPill extends StatelessWidget {
           children: [
             ApexText(label, fontSize: 9, color: const Color(0xFF444444), letterSpacing: 1),
             const SizedBox(height: 4),
-            ApexText(value, fontSize: 13, color: const Color(0xFFCCCCCC), fontWeight: FontWeight.w600),
+            ApexText(
+              value,
+              fontSize: 13,
+              color: const Color(0xFFCCCCCC),
+              fontWeight: FontWeight.w600,
+            ),
           ],
         ),
       ),
@@ -327,7 +571,6 @@ class _StatPill extends StatelessWidget {
   }
 }
 
-// ── المخطط الأسبوعي ──
 class _WeeklyChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -379,7 +622,6 @@ class _WeeklyChart extends StatelessWidget {
   }
 }
 
-// ── المخطط الساعي ──
 class _HourlySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -397,7 +639,7 @@ class _HourlySection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          const HourlyChart(), // هذا العنصر قد يحتاج عرض كافٍ
+          const HourlyChart(),
           const SizedBox(height: 6),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -420,7 +662,11 @@ class _Legend extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+        ),
         const SizedBox(width: 4),
         ApexText(label, fontSize: 10, color: const Color(0xFF555555)),
       ],
@@ -428,7 +674,6 @@ class _Legend extends StatelessWidget {
   }
 }
 
-// ── آخر الحضور ──
 class _LiveCheckins extends StatelessWidget {
   final AsyncValue checkins;
   const _LiveCheckins({required this.checkins});
@@ -448,10 +693,13 @@ class _LiveCheckins extends StatelessWidget {
           const SizedBox(height: 12),
           checkins.when(
             loading: () => Column(
-              children: List.generate(4, (_) => const Padding(
-                padding: EdgeInsets.only(bottom: 10),
-                child: ShimmerCard(),
-              )),
+              children: List.generate(
+                4,
+                (_) => const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: ShimmerCard(),
+                ),
+              ),
             ),
             error: (_, __) => const ApexText('Error loading'),
             data: (list) => list.isEmpty
@@ -467,17 +715,25 @@ class _LiveCheckins extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: isNewest ? greenSuccess.withOpacity(0.05) : const Color(0xFF0A0A0A),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: isNewest ? greenSuccess.withOpacity(0.2) : borderDark),
+                          border: Border.all(
+                            color: isNewest ? greenSuccess.withOpacity(0.2) : borderDark,
+                          ),
                         ),
                         child: Row(
                           children: [
                             Container(
-                              width: 32, height: 32,
-                              decoration: BoxDecoration(color: const Color(0xFF151515), borderRadius: BorderRadius.circular(8)),
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF151515),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                               child: Center(
                                 child: ApexText(
                                   ci.name.isNotEmpty ? ci.name[0].toUpperCase() : '?',
-                                  fontSize: 13, color: gold, fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: gold,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -486,12 +742,23 @@ class _LiveCheckins extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  ApexText(ci.name, fontSize: 12, color: const Color(0xFFCCCCCC), fontWeight: FontWeight.w500),
+                                  ApexText(
+                                    ci.name,
+                                    fontSize: 12,
+                                    color: const Color(0xFFCCCCCC),
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                   const SizedBox(height: 2),
                                   Row(
                                     children: [
-                                      ApexBadge(text: ci.method,
-                                          color: ci.method == 'NFC' ? blueInfo : ci.method == 'QR' ? greenSuccess : orangeWarning),
+                                      ApexBadge(
+                                        text: ci.method,
+                                        color: ci.method == 'NFC'
+                                            ? blueInfo
+                                            : ci.method == 'QR'
+                                                ? greenSuccess
+                                                : orangeWarning,
+                                      ),
                                       const SizedBox(width: 6),
                                       ApexText(ci.plan, fontSize: 9, color: const Color(0xFF444444)),
                                     ],

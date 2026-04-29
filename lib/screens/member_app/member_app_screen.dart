@@ -1,28 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/providers/gym_scoped_providers.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
-import 'package:gymsaas/widgets/apex_card.dart';
 import 'package:gymsaas/widgets/apex_progress_bar.dart';
 import 'package:gymsaas/widgets/occupancy_ring.dart';
 import 'package:gymsaas/widgets/hourly_chart.dart';
 import 'package:gymsaas/widgets/line_chart_widget.dart';
 
-class MemberAppScreen extends StatefulWidget {
+class MemberAppScreen extends ConsumerStatefulWidget {
   const MemberAppScreen({super.key});
 
   @override
-  State<MemberAppScreen> createState() => _MemberAppScreenState();
+  ConsumerState<MemberAppScreen> createState() => _MemberAppScreenState();
 }
 
-class _MemberAppScreenState extends State<MemberAppScreen> {
+class _MemberAppScreenState extends ConsumerState<MemberAppScreen> {
   int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
+    final memberAsync = ref.watch(currentLinkedMemberProvider);
     return Scaffold(
       backgroundColor: bgDark,
-      body: Center(
+      body: memberAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator(color: gold)),
+        error: (error, _) => Center(
+          child: ApexText(
+            'Member profile could not be loaded: $error',
+            color: redAlert,
+            textAlign: TextAlign.center,
+          ),
+        ),
+        data: (member) {
+          if (member == null) {
+            return const Center(
+              child: ApexText(
+                'No linked member profile found for this account.',
+                color: Color(0xFF888888),
+                textAlign: TextAlign.center,
+              ),
+            );
+          }
+          return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -98,6 +119,8 @@ class _MemberAppScreenState extends State<MemberAppScreen> {
             ),
           ],
         ),
+      );
+        },
       ),
     );
   }

@@ -51,6 +51,23 @@ class Lift {
 
 class Member {
   final String id;
+  final String gymId;
+  final String fullName;
+  final String? phone;
+  final String? email;
+  final String? emailNormalized;
+  final String? authUid;
+  final String? accountStatus;
+  final String? currentPlanId;
+  final String? currentPlanName;
+  final String? subscriptionStatus;
+  final DateTime? subscriptionEndDate;
+  final String? gender;
+  final DateTime? dateOfBirth;
+  final String? photoUrl;
+  final String? emergencyContactName;
+  final String? emergencyContactPhone;
+  final String? healthNotes;
   final String name;
   final String plan;
   final String status; // active / inactive / frozen
@@ -69,7 +86,15 @@ class Member {
   final int sessLM; // sessions last month
   final double bf; // body fat %
   final double mm; // muscle mass kg
+  final double? bodyFat;
+  final double? muscleMass;
   final List<String> injuries;
+  final String? nfcTagId;
+  final String? qrCode;
+  final String? assignedCoachId;
+  final String? createdByStaffId;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final String ptime; // morning / afternoon / evening
   final List<String> neglect; // neglected muscle groups
   final List<Lift> lifts;
@@ -79,6 +104,23 @@ class Member {
 
   const Member({
     required this.id,
+    this.gymId = '',
+    String? fullName,
+    this.phone,
+    this.email,
+    this.emailNormalized,
+    this.authUid,
+    this.accountStatus,
+    this.currentPlanId,
+    this.currentPlanName,
+    this.subscriptionStatus,
+    this.subscriptionEndDate,
+    this.gender,
+    this.dateOfBirth,
+    this.photoUrl,
+    this.emergencyContactName,
+    this.emergencyContactPhone,
+    this.healthNotes,
     required this.name,
     required this.plan,
     required this.status,
@@ -97,20 +139,48 @@ class Member {
     required this.sessLM,
     required this.bf,
     required this.mm,
+    this.bodyFat,
+    this.muscleMass,
     required this.injuries,
+    this.nfcTagId,
+    this.qrCode,
+    this.assignedCoachId,
+    this.createdByStaffId,
+    this.createdAt,
+    this.updatedAt,
     required this.ptime,
     required this.neglect,
     required this.lifts,
     required this.nut,
     required this.subLeft,
     required this.lastDays,
-  });
+  }) : fullName = fullName ?? name;
 
   factory Member.fromFirestore(DocumentSnapshot doc) {
     final m = doc.data() as Map<String, dynamic>;
+    final fullName = (m['fullName'] ?? m['name'] ?? '') as String;
+    final bodyFat = (m['bodyFat'] as num?)?.toDouble();
+    final muscleMass = (m['muscleMass'] as num?)?.toDouble();
     return Member(
       id: doc.id,
-      name: m['name'] ?? '',
+      gymId: (m['gymId'] ?? '') as String,
+      fullName: fullName,
+      phone: m['phone'] as String?,
+      email: m['email'] as String?,
+      emailNormalized: m['emailNormalized'] as String?,
+      authUid: m['authUid'] as String?,
+      accountStatus: m['accountStatus'] as String?,
+      currentPlanId: m['currentPlanId'] as String?,
+      currentPlanName: m['currentPlanName'] as String?,
+      subscriptionStatus: m['subscriptionStatus'] as String?,
+      subscriptionEndDate: (m['subscriptionEndDate'] as Timestamp?)?.toDate(),
+      gender: m['gender'] as String?,
+      dateOfBirth: (m['dateOfBirth'] as Timestamp?)?.toDate(),
+      photoUrl: m['photoUrl'] as String?,
+      emergencyContactName: m['emergencyContactName'] as String?,
+      emergencyContactPhone: m['emergencyContactPhone'] as String?,
+      healthNotes: m['healthNotes'] as String?,
+      name: fullName,
       plan: m['plan'] ?? 'Basic',
       status: m['status'] ?? 'active',
       sessions: (m['sessions'] ?? 0) as int,
@@ -126,9 +196,17 @@ class Member {
       att: (m['att'] ?? 0.8).toDouble(),
       sessM: (m['sessM'] ?? 8) as int,
       sessLM: (m['sessLM'] ?? 10) as int,
-      bf: (m['bf'] ?? 20).toDouble(),
-      mm: (m['mm'] ?? 50).toDouble(),
+      bf: (m['bf'] ?? bodyFat ?? 20).toDouble(),
+      mm: (m['mm'] ?? muscleMass ?? 50).toDouble(),
+      bodyFat: bodyFat,
+      muscleMass: muscleMass,
       injuries: List<String>.from(m['injuries'] ?? []),
+      nfcTagId: m['nfcTagId'] as String?,
+      qrCode: m['qrCode'] as String?,
+      assignedCoachId: m['assignedCoachId'] as String?,
+      createdByStaffId: m['createdByStaffId'] as String?,
+      createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
+      updatedAt: (m['updatedAt'] as Timestamp?)?.toDate(),
       ptime: m['ptime'] ?? 'morning',
       neglect: List<String>.from(m['neglect'] ?? []),
       lifts: ((m['lifts'] ?? <dynamic>[]) as List)
@@ -141,6 +219,26 @@ class Member {
   }
 
   Map<String, dynamic> toMap() => {
+        'gymId': gymId,
+        'fullName': fullName,
+        'phone': phone,
+        'email': email,
+        'emailNormalized': emailNormalized,
+        'authUid': authUid,
+        'accountStatus': accountStatus,
+        'currentPlanId': currentPlanId,
+        'currentPlanName': currentPlanName,
+        'subscriptionStatus': subscriptionStatus,
+        'subscriptionEndDate': subscriptionEndDate == null
+            ? null
+            : Timestamp.fromDate(subscriptionEndDate!),
+        'gender': gender,
+        'dateOfBirth':
+            dateOfBirth == null ? null : Timestamp.fromDate(dateOfBirth!),
+        'photoUrl': photoUrl,
+        'emergencyContactName': emergencyContactName,
+        'emergencyContactPhone': emergencyContactPhone,
+        'healthNotes': healthNotes,
         'name': name,
         'plan': plan,
         'status': status,
@@ -159,7 +257,15 @@ class Member {
         'sessLM': sessLM,
         'bf': bf,
         'mm': mm,
+        'bodyFat': bodyFat,
+        'muscleMass': muscleMass,
         'injuries': injuries,
+        'nfcTagId': nfcTagId,
+        'qrCode': qrCode,
+        'assignedCoachId': assignedCoachId,
+        'createdByStaffId': createdByStaffId,
+        'createdAt': createdAt == null ? null : Timestamp.fromDate(createdAt!),
+        'updatedAt': updatedAt == null ? null : Timestamp.fromDate(updatedAt!),
         'ptime': ptime,
         'neglect': neglect,
         'lifts': lifts.map((l) => l.toMap()).toList(),

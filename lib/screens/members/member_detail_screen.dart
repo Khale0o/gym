@@ -4,14 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/models/member.dart';
-import 'package:gymsaas/providers/members_provider.dart';
+import 'package:gymsaas/providers/gym_scoped_providers.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
 import 'package:gymsaas/widgets/apex_card.dart';
 import 'package:gymsaas/widgets/apex_badge.dart';
 import 'package:gymsaas/widgets/apex_progress_bar.dart';
 import 'package:gymsaas/widgets/sparkline_widget.dart';
-import 'package:gymsaas/widgets/shimmer_placeholder.dart';
 
 class MemberDetailScreen extends ConsumerWidget {
   final String id;
@@ -19,7 +18,7 @@ class MemberDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(memberByIdProvider(id));
+    final async = ref.watch(gymMemberByIdProvider(id));
 
     return Scaffold(
       backgroundColor: bgDark,
@@ -172,6 +171,15 @@ class _LeftColumn extends StatelessWidget {
               _StatRow('Last Seen', member.last),
               _StatRow('Check-in', member.tag ?? 'Manual'),
               _StatRow('Sub. Left', '${member.subLeft} days'),
+              if ((member.currentPlanName ?? '').isNotEmpty)
+                _StatRow('Current Plan', member.currentPlanName!),
+              if ((member.subscriptionStatus ?? '').isNotEmpty)
+                _StatRow('Sub. Status', member.subscriptionStatus!),
+              if (member.subscriptionEndDate != null)
+                _StatRow(
+                  'Sub. Ends',
+                  '${member.subscriptionEndDate!.year}-${member.subscriptionEndDate!.month.toString().padLeft(2, '0')}-${member.subscriptionEndDate!.day.toString().padLeft(2, '0')}',
+                ),
             ],
           ),
         ),
@@ -307,7 +315,7 @@ class _LiftCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0A),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: stalled ? redAlert.withOpacity(0.3) : borderDark),
+        border: Border.all(color: stalled ? redAlert.withValues(alpha: 0.3) : borderDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,9 +330,9 @@ class _LiftCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: redAlert.withOpacity(0.1),
+                    color: redAlert.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: redAlert.withOpacity(0.3)),
+                    border: Border.all(color: redAlert.withValues(alpha: 0.3)),
                   ),
                   child: const ApexText('STALLED', fontSize: 9, color: redAlert, fontWeight: FontWeight.w700, letterSpacing: 1),
                 )

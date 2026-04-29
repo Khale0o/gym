@@ -1,22 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:gymsaas/models/member.dart';
-import 'package:gymsaas/models/checkin.dart';
-import 'package:gymsaas/models/plan.dart';
-import 'package:gymsaas/models/transaction_model.dart';
-import 'package:gymsaas/models/staff.dart';
 
 /// Seeds all Firestore collections with demo data.
-/// Call once from settings or a debug button.
+///
+/// Development only:
+/// - never call this automatically from normal UI flow
+/// - never expose this in release mode
 Future<void> seedFirestore() async {
+  if (!kDebugMode) {
+    throw StateError('Demo seeding is disabled outside debug mode.');
+  }
+
   final db = FirebaseFirestore.instance;
 
-  // ── Occupancy ──────────────────────────────────────────────────
   await db.doc('occupancy/current').set({'count': 23});
-
-  // ── Settings ───────────────────────────────────────────────────
   await db.doc('settings/general').set({'capacity': 60});
 
-  // ── Plans ──────────────────────────────────────────────────────
   final plans = [
     {'name': 'Basic', 'price': 150, 'membersCount': 68},
     {'name': 'Premium', 'price': 280, 'membersCount': 51},
@@ -26,7 +26,6 @@ Future<void> seedFirestore() async {
     await db.collection('plans').add(p);
   }
 
-  // ── Members ────────────────────────────────────────────────────
   final members = _buildMembers();
   final Map<String, String> memberIdByName = {};
   for (final m in members) {
@@ -34,10 +33,17 @@ Future<void> seedFirestore() async {
     memberIdByName[m.name] = ref.id;
   }
 
-  // ── Check-ins ──────────────────────────────────────────────────
   final now = DateTime.now();
-  final checkInNames = ['Ahmed K.', 'Sara M.', 'Karim A.', 'Lena R.', 'Omar F.',
-                        'Nora S.', 'Yusuf T.', 'Mia P.'];
+  final checkInNames = [
+    'Ahmed K.',
+    'Sara M.',
+    'Karim A.',
+    'Lena R.',
+    'Omar F.',
+    'Nora S.',
+    'Yusuf T.',
+    'Mia P.',
+  ];
   final methods = ['NFC', 'QR', 'Manual'];
   final ciPlans = ['Basic', 'Premium', 'Elite'];
   for (var i = 0; i < 8; i++) {
@@ -50,7 +56,6 @@ Future<void> seedFirestore() async {
     });
   }
 
-  // ── Transactions ───────────────────────────────────────────────
   final txData = [
     {'category': 'Membership Renewals', 'amount': 8400, 'type': 'income'},
     {'category': 'Personal Training', 'amount': 3200, 'type': 'income'},
@@ -68,7 +73,6 @@ Future<void> seedFirestore() async {
     });
   }
 
-  // ── Staff ──────────────────────────────────────────────────────
   final staffData = [
     {'name': 'Coach Tarek', 'role': 'Head Trainer', 'onDuty': true},
     {'name': 'Hana Adel', 'role': 'Receptionist', 'onDuty': true},
@@ -87,109 +91,253 @@ Future<void> seedFirestore() async {
 
 List<Member> _buildMembers() => [
       Member(
-        id: '', name: 'Ahmed Khalil', plan: 'Elite', status: 'active',
-        sessions: 42, streak: 7, av: 'AK', last: '2h ago',
-        w: 82, tag: 'NFC', age: 28, height: 178, goal: 'muscle_gain',
-        months: 14, att: 0.88, sessM: 12, sessLM: 14, bf: 14.2, mm: 68.4,
-        injuries: [], ptime: 'morning', neglect: ['Legs'],
+        id: '',
+        name: 'Ahmed Khalil',
+        plan: 'Elite',
+        status: 'active',
+        sessions: 42,
+        streak: 7,
+        av: 'AK',
+        last: '2h ago',
+        w: 82,
+        tag: 'NFC',
+        age: 28,
+        height: 178,
+        goal: 'muscle_gain',
+        months: 14,
+        att: 0.88,
+        sessM: 12,
+        sessLM: 14,
+        bf: 14.2,
+        mm: 68.4,
+        injuries: [],
+        ptime: 'morning',
+        neglect: ['Legs'],
         lifts: [
           Lift(ex: 'Bench Press', ws: [80, 82.5, 85, 85, 87.5, 90]),
           Lift(ex: 'Squat', ws: [100, 105, 107.5, 110, 110, 112.5]),
           Lift(ex: 'Deadlift', ws: [120, 125, 130, 132.5, 135, 140]),
         ],
         nut: const Nutrition(ct: 2800, ca: 2650, pt: 180, pa: 162),
-        subLeft: 22, lastDays: 0,
+        subLeft: 22,
+        lastDays: 0,
       ),
       Member(
-        id: '', name: 'Sara Mohamed', plan: 'Premium', status: 'active',
-        sessions: 31, streak: 4, av: 'SM', last: '1d ago',
-        w: 58, tag: 'QR', age: 24, height: 162, goal: 'weight_loss',
-        months: 6, att: 0.72, sessM: 8, sessLM: 11, bf: 22.1, mm: 42.3,
-        injuries: ['Lower Back'], ptime: 'afternoon', neglect: ['Core'],
+        id: '',
+        name: 'Sara Mohamed',
+        plan: 'Premium',
+        status: 'active',
+        sessions: 31,
+        streak: 4,
+        av: 'SM',
+        last: '1d ago',
+        w: 58,
+        tag: 'QR',
+        age: 24,
+        height: 162,
+        goal: 'weight_loss',
+        months: 6,
+        att: 0.72,
+        sessM: 8,
+        sessLM: 11,
+        bf: 22.1,
+        mm: 42.3,
+        injuries: ['Lower Back'],
+        ptime: 'afternoon',
+        neglect: ['Core'],
         lifts: [
           Lift(ex: 'Hip Thrust', ws: [60, 65, 70, 72.5, 72.5, 72.5]),
           Lift(ex: 'Leg Press', ws: [80, 85, 90, 90, 95, 100]),
         ],
         nut: const Nutrition(ct: 1800, ca: 1620, pt: 130, pa: 98),
-        subLeft: 14, lastDays: 1,
+        subLeft: 14,
+        lastDays: 1,
       ),
       Member(
-        id: '', name: 'Karim Amir', plan: 'Basic', status: 'active',
-        sessions: 18, streak: 2, av: 'KA', last: '3d ago',
-        w: 91, tag: null, age: 33, height: 182, goal: 'general_fitness',
-        months: 3, att: 0.55, sessM: 5, sessLM: 9, bf: 26.8, mm: 61.2,
-        injuries: ['Shoulder Impingement'], ptime: 'evening', neglect: ['Cardio', 'Flexibility'],
+        id: '',
+        name: 'Karim Amir',
+        plan: 'Basic',
+        status: 'active',
+        sessions: 18,
+        streak: 2,
+        av: 'KA',
+        last: '3d ago',
+        w: 91,
+        tag: null,
+        age: 33,
+        height: 182,
+        goal: 'general_fitness',
+        months: 3,
+        att: 0.55,
+        sessM: 5,
+        sessLM: 9,
+        bf: 26.8,
+        mm: 61.2,
+        injuries: ['Shoulder Impingement'],
+        ptime: 'evening',
+        neglect: ['Cardio', 'Flexibility'],
         lifts: [
           Lift(ex: 'Bench Press', ws: [70, 72.5, 75, 75, 75, 75]),
           Lift(ex: 'Lat Pulldown', ws: [55, 57.5, 60, 60, 60, 62.5]),
         ],
         nut: const Nutrition(ct: 2400, ca: 2800, pt: 160, pa: 95),
-        subLeft: 5, lastDays: 3,
+        subLeft: 5,
+        lastDays: 3,
       ),
       Member(
-        id: '', name: 'Lena Ramzy', plan: 'Elite', status: 'active',
-        sessions: 56, streak: 14, av: 'LR', last: '4h ago',
-        w: 62, tag: 'NFC', age: 26, height: 168, goal: 'muscle_gain',
-        months: 22, att: 0.94, sessM: 16, sessLM: 15, bf: 18.4, mm: 48.6,
-        injuries: [], ptime: 'morning', neglect: [],
+        id: '',
+        name: 'Lena Ramzy',
+        plan: 'Elite',
+        status: 'active',
+        sessions: 56,
+        streak: 14,
+        av: 'LR',
+        last: '4h ago',
+        w: 62,
+        tag: 'NFC',
+        age: 26,
+        height: 168,
+        goal: 'muscle_gain',
+        months: 22,
+        att: 0.94,
+        sessM: 16,
+        sessLM: 15,
+        bf: 18.4,
+        mm: 48.6,
+        injuries: [],
+        ptime: 'morning',
+        neglect: [],
         lifts: [
           Lift(ex: 'Romanian Deadlift', ws: [70, 75, 80, 82.5, 85, 87.5]),
           Lift(ex: 'Overhead Press', ws: [35, 37.5, 40, 42.5, 45, 47.5]),
           Lift(ex: 'Pull-ups', ws: [0, 0, 2.5, 5, 7.5, 10]),
         ],
         nut: const Nutrition(ct: 2200, ca: 2190, pt: 155, pa: 148),
-        subLeft: 38, lastDays: 0,
+        subLeft: 38,
+        lastDays: 0,
       ),
       Member(
-        id: '', name: 'Omar Fathi', plan: 'Premium', status: 'active',
-        sessions: 27, streak: 0, av: 'OF', last: '6d ago',
-        w: 78, tag: 'QR', age: 31, height: 175, goal: 'weight_loss',
-        months: 8, att: 0.58, sessM: 4, sessLM: 10, bf: 23.5, mm: 55.8,
-        injuries: [], ptime: 'evening', neglect: ['Upper Back', 'Arms'],
+        id: '',
+        name: 'Omar Fathi',
+        plan: 'Premium',
+        status: 'active',
+        sessions: 27,
+        streak: 0,
+        av: 'OF',
+        last: '6d ago',
+        w: 78,
+        tag: 'QR',
+        age: 31,
+        height: 175,
+        goal: 'weight_loss',
+        months: 8,
+        att: 0.58,
+        sessM: 4,
+        sessLM: 10,
+        bf: 23.5,
+        mm: 55.8,
+        injuries: [],
+        ptime: 'evening',
+        neglect: ['Upper Back', 'Arms'],
         lifts: [
           Lift(ex: 'Treadmill 10k', ws: [58, 56, 54, 53, 53, 53]),
           Lift(ex: 'Rowing Machine', ws: [45, 47, 50, 50, 50, 50]),
         ],
         nut: const Nutrition(ct: 2000, ca: 2400, pt: 140, pa: 88),
-        subLeft: 18, lastDays: 6,
+        subLeft: 18,
+        lastDays: 6,
       ),
       Member(
-        id: '', name: 'Nora Saleh', plan: 'Basic', status: 'inactive',
-        sessions: 9, streak: 0, av: 'NS', last: '12d ago',
-        w: 66, tag: null, age: 29, height: 165, goal: 'general_fitness',
-        months: 2, att: 0.42, sessM: 2, sessLM: 5, bf: 28.2, mm: 38.9,
-        injuries: ['Knee Pain'], ptime: 'afternoon', neglect: ['Lower Body'],
+        id: '',
+        name: 'Nora Saleh',
+        plan: 'Basic',
+        status: 'inactive',
+        sessions: 9,
+        streak: 0,
+        av: 'NS',
+        last: '12d ago',
+        w: 66,
+        tag: null,
+        age: 29,
+        height: 165,
+        goal: 'general_fitness',
+        months: 2,
+        att: 0.42,
+        sessM: 2,
+        sessLM: 5,
+        bf: 28.2,
+        mm: 38.9,
+        injuries: ['Knee Pain'],
+        ptime: 'afternoon',
+        neglect: ['Lower Body'],
         lifts: [
           Lift(ex: 'Walking Lunges', ws: [20, 20, 22.5, 22.5, 22.5, 22.5]),
         ],
         nut: const Nutrition(ct: 1700, ca: 1900, pt: 110, pa: 62),
-        subLeft: 2, lastDays: 12,
+        subLeft: 2,
+        lastDays: 12,
       ),
       Member(
-        id: '', name: 'Yusuf Tamer', plan: 'Elite', status: 'active',
-        sessions: 61, streak: 21, av: 'YT', last: '1h ago',
-        w: 88, tag: 'NFC', age: 25, height: 183, goal: 'muscle_gain',
-        months: 18, att: 0.96, sessM: 18, sessLM: 17, bf: 11.8, mm: 73.2,
-        injuries: [], ptime: 'morning', neglect: [],
+        id: '',
+        name: 'Yusuf Tamer',
+        plan: 'Elite',
+        status: 'active',
+        sessions: 61,
+        streak: 21,
+        av: 'YT',
+        last: '1h ago',
+        w: 88,
+        tag: 'NFC',
+        age: 25,
+        height: 183,
+        goal: 'muscle_gain',
+        months: 18,
+        att: 0.96,
+        sessM: 18,
+        sessLM: 17,
+        bf: 11.8,
+        mm: 73.2,
+        injuries: [],
+        ptime: 'morning',
+        neglect: [],
         lifts: [
           Lift(ex: 'Bench Press', ws: [110, 115, 117.5, 120, 122.5, 125]),
           Lift(ex: 'Squat', ws: [150, 155, 160, 162.5, 165, 170]),
           Lift(ex: 'Deadlift', ws: [180, 185, 190, 195, 200, 205]),
         ],
         nut: const Nutrition(ct: 3200, ca: 3180, pt: 210, pa: 205),
-        subLeft: 44, lastDays: 0,
+        subLeft: 44,
+        lastDays: 0,
       ),
       Member(
-        id: '', name: 'Mia Petros', plan: 'Premium', status: 'active',
-        sessions: 34, streak: 5, av: 'MP', last: '2d ago',
-        w: 54, tag: 'QR', age: 22, height: 158, goal: 'weight_loss',
-        months: 5, att: 0.78, sessM: 10, sessLM: 10, bf: 24.6, mm: 36.4,
-        injuries: [], ptime: 'afternoon', neglect: ['Shoulders'],
+        id: '',
+        name: 'Mia Petros',
+        plan: 'Premium',
+        status: 'active',
+        sessions: 34,
+        streak: 5,
+        av: 'MP',
+        last: '2d ago',
+        w: 54,
+        tag: 'QR',
+        age: 22,
+        height: 158,
+        goal: 'weight_loss',
+        months: 5,
+        att: 0.78,
+        sessM: 10,
+        sessLM: 10,
+        bf: 24.6,
+        mm: 36.4,
+        injuries: [],
+        ptime: 'afternoon',
+        neglect: ['Shoulders'],
         lifts: [
           Lift(ex: 'Cable Fly', ws: [15, 17.5, 20, 22.5, 25, 27.5]),
           Lift(ex: 'Leg Curl', ws: [30, 32.5, 35, 37.5, 37.5, 40]),
         ],
         nut: const Nutrition(ct: 1600, ca: 1550, pt: 115, pa: 108),
-        subLeft: 27, lastDays: 2,
+        subLeft: 27,
+        lastDays: 2,
       ),
     ];

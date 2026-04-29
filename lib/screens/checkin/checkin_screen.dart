@@ -49,6 +49,24 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
     super.dispose();
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: redAlert,
+      ),
+    );
+  }
+
+  Future<void> _changeOccupancy(double nextCount) async {
+    try {
+      await updateOccupancy(nextCount);
+    } catch (error) {
+      _showError(error.toString().replaceFirst('StateError: ', ''));
+    }
+  }
+
   Future<void> _simulateScan() async {
     if (_scanning) return;
 
@@ -65,12 +83,19 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
     if (members.isNotEmpty && mounted) {
       final m = members[Random().nextInt(members.length)];
 
-      await addCheckIn(
-        memberId: m.id,
-        name: m.name,
-        method: 'NFC',
-        plan: m.plan,
-      );
+      try {
+        await addCheckIn(
+          memberId: m.id,
+          name: m.name,
+          method: 'NFC',
+          plan: m.plan,
+        );
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _scanning = false);
+        _showError(error.toString().replaceFirst('StateError: ', ''));
+        return;
+      }
 
       setState(() {
         _scanning = false;
@@ -356,14 +381,16 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                 children: [
                   _OccBtn(
                     icon: Icons.remove_rounded,
-                    onTap: () => updateOccupancy(
-                        (count - 1).clamp(0.0, gymCapacity.toDouble())),
+                    onTap: () => _changeOccupancy(
+                      (count - 1).clamp(0.0, gymCapacity.toDouble()),
+                    ),
                   ),
                   const SizedBox(width: 24),
                   _OccBtn(
                     icon: Icons.add_rounded,
-                    onTap: () => updateOccupancy(
-                        (count + 1).clamp(0.0, gymCapacity.toDouble())),
+                    onTap: () => _changeOccupancy(
+                      (count + 1).clamp(0.0, gymCapacity.toDouble()),
+                    ),
                   ),
                 ],
               ),
@@ -375,7 +402,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                 divisions: gymCapacity,
                 activeColor: ocColor(pct),
                 inactiveColor: borderDark,
-                onChanged: (v) => updateOccupancy(v),
+                onChanged: (v) => _changeOccupancy(v),
               ),
             ],
           ),

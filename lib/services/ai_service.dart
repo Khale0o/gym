@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:gymsaas/models/member.dart';
 
@@ -8,13 +9,37 @@ import 'package:gymsaas/models/member.dart';
 const String _kFunctionUrl =
     'https://us-central1-apex-gym-system.cloudfunctions.net/aiAnalyze';
 
+enum AiResponseKind {
+  real,
+  demo,
+  unavailable,
+}
+
+class AiResponseEvent {
+  final AiResponseKind kind;
+  final String? textChunk;
+  final String? message;
+
+  const AiResponseEvent({
+    required this.kind,
+    this.textChunk,
+    this.message,
+  });
+}
+
 class AiService {
-  /// Streams AI response tokens for a given [mode] and [member].
-  /// Falls back to a mock stream if the function is unreachable.
-  Stream<String> analyze({
+  /// Streams AI response events for a given [mode] and [member].
+  ///
+  /// Real backend responses are marked as [AiResponseKind.real].
+  /// Demo output is only allowed in debug mode and is marked as
+  /// [AiResponseKind.demo].
+  /// Backend failures without demo mode return
+  /// [AiResponseKind.unavailable].
+  Stream<AiResponseEvent> analyze({
     required Member member,
     required String mode, // coach | churn | nutrition | chat
     String? userMessage,
+    bool allowDemoFallback = false,
   }) async* {
     try {
       final request = http.Request('POST', Uri.parse(_kFunctionUrl));
@@ -29,26 +54,57 @@ class AiService {
           await request.send().timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        await for (final chunk
-            in response.stream.transform(utf8.decoder)) {
-          yield chunk;
+        yield const AiResponseEvent(kind: AiResponseKind.real);
+        await for (final chunk in response.stream.transform(utf8.decoder)) {
+          yield AiResponseEvent(
+            kind: AiResponseKind.real,
+            textChunk: chunk,
+          );
         }
-      } else {
-        // Cloud Function returned an error — use mock
-        yield* _mockStream(member, mode);
+        return;
       }
+
+      if (allowDemoFallback && kDebugMode) {
+        yield const AiResponseEvent(
+          kind: AiResponseKind.demo,
+          message: 'DEMO ONLY: local mock output, not a real backend response.',
+        );
+        yield* _mockStream(member, mode);
+        return;
+      }
+
+      yield AiResponseEvent(
+        kind: AiResponseKind.unavailable,
+        message:
+            'AI backend unavailable. Cloud Function returned status ${response.statusCode}.',
+      );
     } catch (_) {
-      // Network unreachable or function not deployed — use mock
-      yield* _mockStream(member, mode);
+      if (allowDemoFallback && kDebugMode) {
+        yield const AiResponseEvent(
+          kind: AiResponseKind.demo,
+          message: 'DEMO ONLY: local mock output, not a real backend response.',
+        );
+        yield* _mockStream(member, mode);
+        return;
+      }
+
+      yield const AiResponseEvent(
+        kind: AiResponseKind.unavailable,
+        message:
+            'AI backend unavailable. Please try again later or verify the Cloud Function deployment.',
+      );
     }
   }
 
-  Stream<String> _mockStream(Member member, String mode) async* {
+  Stream<AiResponseEvent> _mockStream(Member member, String mode) async* {
     final text = _mockResponse(member, mode);
     final words = text.split(' ');
     for (final word in words) {
       await Future.delayed(const Duration(milliseconds: 40));
-      yield '$word ';
+      yield AiResponseEvent(
+        kind: AiResponseKind.demo,
+        textChunk: '$word ',
+      );
     }
   }
 
@@ -65,7 +121,7 @@ class AiService {
 
 **4-Week Program:**
 • Week 1–2: Foundation — 4×8 compound lifts at 70% 1RM
-• Week 3: Progressive overload — increase 2.5–5 kg on main lifts  
+• Week 3: Progressive overload — increase 2.5–5 kg on main lifts
 • Week 4: Deload — 3×6 at 60% to allow recovery
 
 **Recovery Protocol:** 7–9h sleep, foam roll post-session, cold contrast showers 3×/week.
@@ -73,10 +129,14 @@ class AiService {
 Train smart. Train APEX.''';
 
       case 'churn':
-        final riskScore = member.att < 0.6 ? 78 : member.sessM < member.sessLM * 0.6 ? 65 : 24;
+        final riskScore = member.att < 0.6
+            ? 78
+            : member.sessM < member.sessLM * 0.6
+                ? 65
+                : 24;
         return '''**CHURN RISK SCORE: $riskScore / 100**
 
-**Risk Level:** ${riskScore > 60 ? '🔴 HIGH' : riskScore > 40 ? '🟡 MEDIUM' : '🟢 LOW'}
+**Risk Level:** ${riskScore > 60 ? 'HIGH' : riskScore > 40 ? 'MEDIUM' : 'LOW'}
 
 **Risk Signals Detected:**
 • Session frequency: ${member.sessM} this month vs ${member.sessLM} last month (${((1 - member.sessM / (member.sessLM == 0 ? 1 : member.sessLM)) * 100).round()}% drop)
@@ -100,7 +160,7 @@ Train smart. Train APEX.''';
 
 **Recalculated Macros (based on ${member.bf}% BF, ${member.mm} kg LBM):**
 • Calories: ${(member.nut.ct * 1.02).round()} kcal
-• Protein: ${(member.mm * 2.2).round()} g  
+• Protein: ${(member.mm * 2.2).round()} g
 • Carbs: ${((member.nut.ct * 0.45) / 4).round()} g
 • Fat: ${((member.nut.ct * 0.25) / 9).round()} g
 

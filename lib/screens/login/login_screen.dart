@@ -1,9 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
+import 'package:gymsaas/providers/staff_invite_signup_provider.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -15,10 +17,16 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with TickerProviderStateMixin {
-  final _emailCtrl = TextEditingController(text: 'admin@apex.gym');
-  final _passCtrl = TextEditingController(text: 'apex2024');
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _fullNameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
   bool _loading = false;
+  bool _signupMode = false;
+  bool _claimingInvite = false;
   String? _error;
+  String? _success;
 
   late AnimationController _fadeCtrl;
   late Animation<double> _fadeAnim;
@@ -32,11 +40,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.initState();
 
     _fadeCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
 
     _typeCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1500));
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
     _typeAnim = CurvedAnimation(parent: _typeCtrl, curve: Curves.easeOut);
 
     _fadeCtrl.forward();
@@ -47,6 +59,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _confirmPassCtrl.dispose();
     _fadeCtrl.dispose();
     _typeCtrl.dispose();
     super.dispose();
@@ -56,19 +71,99 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     setState(() {
       _loading = true;
       _error = null;
+      _success = null;
     });
-    await ref.read(authProvider.notifier).login(_emailCtrl.text, _passCtrl.text);
+
+    final error = await ref.read(authControllerProvider).signIn(
+          email: _emailCtrl.text,
+          password: _passCtrl.text,
+        );
+
     if (!mounted) return;
     setState(() {
       _loading = false;
+      _error = error;
     });
+  }
+
+  Future<void> _signupFromInvite() async {
+    final validationError = _validateSignup();
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _claimingInvite = true;
+      _error = null;
+      _success = null;
+    });
+
+    final error = await ref
+        .read(staffInviteSignupControllerProvider)
+        .signUpAndClaimStaffInvite(
+          fullName: _fullNameCtrl.text,
+          email: _emailCtrl.text,
+          password: _passCtrl.text,
+          phone: _phoneCtrl.text,
+        );
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _claimingInvite = false;
+      _error = error;
+    });
+
+    if (error == null) {
+      _passCtrl.clear();
+      _confirmPassCtrl.clear();
+      setState(() {
+        _signupMode = false;
+        _success = 'Account created successfully. Please sign in.';
+      });
+    }
+  }
+
+  Future<void> _enterSignupMode() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _success = null;
+    });
+
+    final currentUser = ref.read(firebaseAuthProvider).currentUser;
+    if (currentUser != null) {
+      await ref.read(firebaseAuthProvider).signOut();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _signupMode = true;
+    });
+  }
+
+  String? _validateSignup() {
+    final fullName = _fullNameCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final password = _passCtrl.text;
+    final confirmPassword = _confirmPassCtrl.text;
+
+    if (fullName.isEmpty) return 'Full name is required.';
+    if (email.isEmpty) return 'Email is required.';
+    final validEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+    if (!validEmail) return 'Enter a valid email address.';
+    if (password.length < 8) return 'Password must be at least 8 characters.';
+    if (confirmPassword != password) return 'Passwords do not match.';
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    // مراقبة المصادقة والتوجيه التلقائي
-    ref.listen<AuthState>(authProvider, (prev, next) {
-      if (next.isLoggedIn) {
+    ref.listen<AsyncValue<User?>>(authStateProvider, (prev, next) {
+      if (next.valueOrNull != null && !_claimingInvite) {
         context.go('/');
       }
     });
@@ -101,19 +196,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ),
             ),
           ),
-          Center(
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: Container(
-                width: 400,
-                padding: const EdgeInsets.all(40),
+          Positioned.fill(
+            child: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 24,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight - 48,
+                      ),
+                      child: Center(
+                        child: FadeTransition(
+                          opacity: _fadeAnim,
+                          child: Container(
+                            width: 420,
+                            padding: EdgeInsets.all(
+                              constraints.maxHeight < 720 ? 24 : 36,
+                            ),
                 decoration: BoxDecoration(
                   color: cardDark,
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: borderDark),
                   boxShadow: [
                     BoxShadow(
-                      color: gold.withOpacity(0.06),
+                      color: gold.withValues(alpha: 0.06),
                       blurRadius: 40,
                     ),
                   ],
@@ -121,7 +231,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // الشعار الذهبي
                     Container(
                       width: 56,
                       height: 56,
@@ -132,16 +241,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: gold.withOpacity(0.3),
+                            color: gold.withValues(alpha: 0.3),
                             blurRadius: 20,
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.fitness_center,
-                          color: Colors.black, size: 28),
+                      child: const Icon(
+                        Icons.fitness_center,
+                        color: Colors.black,
+                        size: 28,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    // كتابة APEX حرف حرف
                     _BuildTypewriterText(
                       text: _brandName,
                       animation: _typeAnim,
@@ -153,7 +264,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // النص الفرعي يظهر بعد انتهاء معظم الكتابة
                     AnimatedBuilder(
                       animation: _typeAnim,
                       builder: (context, child) {
@@ -172,36 +282,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         color: Color(0xFF555555),
                       ),
                     ),
-                    const SizedBox(height: 36),
-                    // حقل البريد الإلكتروني
+                    const SizedBox(height: 28),
+                    if (_signupMode) ...[
+                      _ApexInput(
+                        controller: _fullNameCtrl,
+                        label: 'Full name',
+                        icon: Icons.badge_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _ApexInput(
                       controller: _emailCtrl,
                       label: 'Email',
                       icon: Icons.email_outlined,
                     ),
                     const SizedBox(height: 12),
-                    // حقل كلمة المرور
                     _ApexInput(
                       controller: _passCtrl,
                       label: 'Password',
                       icon: Icons.lock_outline_rounded,
                       obscure: true,
                     ),
+                    if (_signupMode) ...[
+                      const SizedBox(height: 12),
+                      _ApexInput(
+                        controller: _confirmPassCtrl,
+                        label: 'Confirm password',
+                        icon: Icons.lock_reset_rounded,
+                        obscure: true,
+                      ),
+                      const SizedBox(height: 12),
+                      _ApexInput(
+                        controller: _phoneCtrl,
+                        label: 'Phone',
+                        icon: Icons.phone_outlined,
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     if (_error != null) ...[
                       const SizedBox(height: 4),
-                      ApexText(_error!,
-                          fontSize: 12,
-                          color: redAlert,
-                          fontWeight: FontWeight.w500),
+                      ApexText(
+                        _error!,
+                        fontSize: 12,
+                        color: redAlert,
+                        fontWeight: FontWeight.w500,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    if (_success != null) ...[
+                      const SizedBox(height: 4),
+                      ApexText(
+                        _success!,
+                        fontSize: 12,
+                        color: greenSuccess,
+                        fontWeight: FontWeight.w600,
+                        textAlign: TextAlign.center,
+                      ),
                     ],
                     const SizedBox(height: 24),
-                    // زر الدخول
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: _loading ? null : _login,
+                        onPressed: _loading
+                            ? null
+                            : (_signupMode ? _signupFromInvite : _login),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: gold,
                           foregroundColor: Colors.black,
@@ -215,10 +360,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
-                                    color: Colors.black, strokeWidth: 2),
+                                  color: Colors.black,
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text(
-                                'SIGN IN',
+                                _signupMode ? 'CREATE ACCOUNT' : 'SIGN IN',
                                 style: GoogleFonts.cinzel(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -227,14 +374,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    const ApexText(
-                      'Pre-filled for demo — tap Sign In',
+                    const SizedBox(height: 14),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () {
+                              if (_signupMode) {
+                                setState(() {
+                                  _signupMode = false;
+                                  _error = null;
+                                  _success = null;
+                                });
+                              } else {
+                                _enterSignupMode();
+                              }
+                            },
+                      child: ApexText(
+                        _signupMode
+                            ? 'Already have an account? Sign in'
+                            : 'Have an invite? Create account',
+                        fontSize: 11,
+                        color: gold,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    ApexText(
+                      _signupMode
+                          ? 'Create account from a staff invite'
+                          : 'Sign in with your gym account',
                       fontSize: 10,
-                      color: Color(0xFF3A3A3A),
+                      color: const Color(0xFF3A3A3A),
                     ),
                   ],
                 ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -244,9 +422,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// ويدجت الكتابة الحرفية (Typewriter)
-// ────────────────────────────────────────────────────────────────────────
 class _BuildTypewriterText extends StatelessWidget {
   final String text;
   final Animation<double> animation;
@@ -265,15 +440,17 @@ class _BuildTypewriterText extends StatelessWidget {
       animation: animation,
       builder: (context, child) {
         final progress = animation.value;
-        final visibleCount = (progress * chars.length).ceil().clamp(0, chars.length);
+        final visibleCount =
+            (progress * chars.length).ceil().clamp(0, chars.length);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(chars.length, (index) {
             if (index >= visibleCount) {
-              // لم يظهر بعد
-              return Opacity(opacity: 0.0, child: Text(chars[index], style: style));
+              return Opacity(
+                opacity: 0.0,
+                child: Text(chars[index], style: style),
+              );
             } else if (index == visibleCount - 1 && progress < 1.0) {
-              // الحرف الحالي: يظهر بتأثير fade + slide
               final charProgress = (progress * chars.length) - index;
               return Opacity(
                 opacity: charProgress.clamp(0.0, 1.0),
@@ -283,7 +460,6 @@ class _BuildTypewriterText extends StatelessWidget {
                 ),
               );
             } else {
-              // ظهر بالكامل
               return Text(chars[index], style: style);
             }
           }),
@@ -293,9 +469,6 @@ class _BuildTypewriterText extends StatelessWidget {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// حقل إدخال مخصص
-// ────────────────────────────────────────────────────────────────────────
 class _ApexInput extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -333,7 +506,10 @@ class _ApexInput extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: gold),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }
