@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/models/effective_subscription_status.dart';
+import 'package:gymsaas/models/member_access_eligibility.dart';
 import 'package:gymsaas/models/member.dart';
 import 'package:gymsaas/models/membership_plan.dart';
 import 'package:gymsaas/models/subscription.dart';
 import 'package:gymsaas/navigation/role_capabilities.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/gym_scoped_providers.dart';
+import 'package:gymsaas/repositories/member_repository.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
 import 'package:gymsaas/widgets/apex_badge.dart';
@@ -248,6 +251,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
   final _genderController = TextEditingController();
   final _goalController = TextEditingController();
   final _nfcTagIdController = TextEditingController();
+  final _qrAccessCodeController = TextEditingController();
   final _emergencyNameController = TextEditingController();
   final _emergencyPhoneController = TextEditingController();
   final _healthNotesController = TextEditingController();
@@ -266,6 +270,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
     _genderController.dispose();
     _goalController.dispose();
     _nfcTagIdController.dispose();
+    _qrAccessCodeController.dispose();
     _emergencyNameController.dispose();
     _emergencyPhoneController.dispose();
     _healthNotesController.dispose();
@@ -368,10 +373,15 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                       _FieldSlot(
                         child: _MemberTextField(
                           controller: _nfcTagIdController,
-                          label: 'NFC tag ID',
+                          label: 'NFC Tag ID',
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  _MemberTextField(
+                    controller: _qrAccessCodeController,
+                    label: 'QR / Access Code',
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -621,6 +631,12 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
       final navigator = Navigator.of(context);
       final fullName = _fullNameController.text.trim();
       final email = _optionalText(_emailController)?.toLowerCase();
+      final nfcTagId = _optionalText(_nfcTagIdController);
+      final qrAccessCode = _optionalText(_qrAccessCodeController);
+      final nfcTagIdNormalized =
+          MemberRepository.normalizeAccessIdentifier(nfcTagId);
+      final qrAccessCodeNormalized =
+          MemberRepository.normalizeAccessIdentifier(qrAccessCode);
       if (email != null) {
         final validEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
         if (!validEmail) {
@@ -641,6 +657,19 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
         }
       }
 
+      final accessDuplicate =
+          await ref.read(memberRepositoryProvider).accessIdentifierExists(
+                gymId: gymId,
+                nfcTagId: nfcTagId,
+                qrCode: qrAccessCode,
+                accessCode: qrAccessCode,
+              );
+      if (accessDuplicate) {
+        throw StateError(
+          'This NFC tag or QR/access code is already assigned to another member.',
+        );
+      }
+
       final selectedPlan = _selectedPlan;
       final startDate = DateTime.now();
       final endDate = selectedPlan == null
@@ -658,7 +687,17 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
         'emailNormalized': email,
         'gender': _optionalText(_genderController),
         'goal': _optionalText(_goalController) ?? 'general_fitness',
-        'nfcTagId': _optionalText(_nfcTagIdController),
+        'nfcTagId': nfcTagId,
+        'nfcTagIdNormalized': nfcTagIdNormalized,
+        'qrCode': qrAccessCode,
+        'qrCodeNormalized': qrAccessCodeNormalized,
+        'accessCode': qrAccessCode,
+        'accessCodeNormalized': qrAccessCodeNormalized,
+        if (nfcTagId != null || qrAccessCode != null) ...{
+          'accessStatus': 'active',
+          'accessAssignedAt': FieldValue.serverTimestamp(),
+          'accessUpdatedAt': FieldValue.serverTimestamp(),
+        },
         'emergencyContactName': _optionalText(_emergencyNameController),
         'emergencyContactPhone': _optionalText(_emergencyPhoneController),
         'healthNotes': _optionalText(_healthNotesController),
@@ -883,6 +922,17 @@ class _MemberCardState extends State<_MemberCard> {
     final risk = churnRisk(m);
     final rc = churnColor(risk);
     final isMobile = MediaQuery.of(context).size.width < 700;
+    final subscriptionState = EffectiveSubscriptionState.fromMember(m);
+    final memberStatus = m.status.trim().toLowerCase() == 'active'
+        ? 'Active'
+        : 'Inactive';
+    final memberStatusColor =
+        memberStatus == 'Active' ? greenSuccess : redAlert;
+    final accessLabel = memberAccessStatusLabel(m);
+    final accessColor = memberAccessStatusColor(m);
+    final planName = (m.currentPlanName ?? '').trim().isEmpty
+        ? m.plan
+        : m.currentPlanName!.trim();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -929,8 +979,33 @@ class _MemberCardState extends State<_MemberCard> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    ApexText(m.last, fontSize: isMobile ? 10 : 11,
-                        color: const Color(0xFF555555)),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ApexText(
+                          m.last,
+                          fontSize: isMobile ? 10 : 11,
+                          color: const Color(0xFF555555),
+                        ),
+                        if (isMobile)
+                          ApexBadge(
+                            text: subscriptionState.label,
+                            color: subscriptionState.color,
+                          ),
+                        if (isMobile)
+                          ApexBadge(
+                            text: memberStatus,
+                            color: memberStatusColor,
+                          ),
+                        if (isMobile)
+                          ApexBadge(
+                            text: accessLabel,
+                            color: accessColor,
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -943,13 +1018,22 @@ class _MemberCardState extends State<_MemberCard> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ApexBadge(
-                          text: m.plan,
-                          color: m.plan == 'Elite' ? gold : m.plan == 'Premium' ? blueInfo : const Color(0xFF555555),
+                          text: planName,
+                          color: planName == 'Elite'
+                              ? gold
+                              : planName == 'Premium'
+                                  ? blueInfo
+                                  : const Color(0xFF555555),
                         ),
                         const SizedBox(width: 6),
                         ApexBadge(
-                          text: m.status,
-                          color: m.status == 'active' ? greenSuccess : redAlert,
+                          text: subscriptionState.label,
+                          color: subscriptionState.color,
+                        ),
+                        const SizedBox(width: 6),
+                        ApexBadge(
+                          text: memberStatus,
+                          color: memberStatusColor,
                         ),
                       ],
                     ),
@@ -957,6 +1041,11 @@ class _MemberCardState extends State<_MemberCard> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        ApexBadge(
+                          text: accessLabel,
+                          color: accessColor,
+                        ),
+                        const SizedBox(width: 6),
                         Container(
                           width: 7, height: 7,
                           decoration: BoxDecoration(color: rc, shape: BoxShape.circle),

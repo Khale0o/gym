@@ -10,8 +10,10 @@ const String dashboardRoute = '/';
 const String membersRoute = '/members';
 const String checkinRoute = '/checkin';
 const String financeRoute = '/erp';
+const String paymentsRoute = '/payments';
 const String staffManagementRoute = '/staff';
 const String plansRoute = '/plans';
+const String settingsRoute = '/settings';
 const String memberAppRoute = '/member-app';
 const String aiRoute = '/ai';
 const String accessErrorRoute = '/access-error';
@@ -30,8 +32,10 @@ const Map<String, Set<String>> _roleRoutes = {
     membersRoute,
     checkinRoute,
     financeRoute,
+    paymentsRoute,
     staffManagementRoute,
     plansRoute,
+    settingsRoute,
     memberAppRoute,
     aiRoute,
   },
@@ -40,14 +44,17 @@ const Map<String, Set<String>> _roleRoutes = {
     membersRoute,
     checkinRoute,
     financeRoute,
+    paymentsRoute,
     staffManagementRoute,
     plansRoute,
+    settingsRoute,
     memberAppRoute,
     aiRoute,
   },
   receptionRole: {
     membersRoute,
     checkinRoute,
+    paymentsRoute,
   },
   coachRole: {
     membersRoute,

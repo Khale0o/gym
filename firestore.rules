@@ -1,0 +1,413 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userRole() {
+      return signedIn() ? userProfile().role : null;
+    }
+
+    function userStatus() {
+      return signedIn() ? userProfile().status : null;
+    }
+
+    function isActiveUser() {
+      return signedIn() && userStatus() == 'active';
+    }
+
+    function userGymId() {
+      return signedIn() ? userProfile().defaultGymId : null;
+    }
+
+    function isGymUser(gymId) {
+      return isActiveUser() && userGymId() == gymId;
+    }
+
+    function isOwner() {
+      return isActiveUser() && userRole() == 'owner';
+    }
+
+    function isAdmin() {
+      return isActiveUser() && userRole() == 'admin';
+    }
+
+    function isReception() {
+      return isActiveUser() && userRole() == 'reception';
+    }
+
+    function isCoach() {
+      return isActiveUser() && userRole() == 'coach';
+    }
+
+    function isMember() {
+      return isActiveUser() && userRole() == 'member';
+    }
+
+    function isOwnerOrAdmin() {
+      return isOwner() || isAdmin();
+    }
+
+    function isOwnerAdminReception() {
+      return isOwner() || isAdmin() || isReception();
+    }
+
+    function isStaffRole() {
+      return isOwner() || isAdmin() || isReception() || isCoach();
+    }
+
+    function isLinkedMember(gymId, memberId) {
+      return isGymUser(gymId) &&
+        isMember() &&
+        userProfile().linkedMemberId == memberId;
+    }
+
+    function authEmail() {
+      return signedIn() && request.auth.token.email is string
+        ? request.auth.token.email
+        : '';
+    }
+
+    function unchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    function hasOnlyChanged(allowedFields) {
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(allowedFields);
+    }
+
+    function hasOnlyAffected(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(allowedFields);
+    }
+
+    function allowedUserCreateKeys() {
+      return [
+        'role',
+        'status',
+        'defaultGymId',
+        'linkedMemberId',
+        'displayName',
+        'email',
+        'phone',
+        'createdAt',
+        'updatedAt',
+        'createdFromInvite',
+        'inviteId'
+      ];
+    }
+
+    function inviteDoc(gymId, collectionId, inviteId) {
+      return get(/databases/$(database)/documents/gyms/$(gymId)/$(collectionId)/$(inviteId)).data;
+    }
+
+    function hasMatchingPendingStaffInvite() {
+      return request.resource.data.role in ['admin', 'reception', 'coach'] &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'staffInvites',
+          request.resource.data.inviteId
+        ).status == 'pending' &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'staffInvites',
+          request.resource.data.inviteId
+        ).emailNormalized == authEmail() &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'staffInvites',
+          request.resource.data.inviteId
+        ).role == request.resource.data.role;
+    }
+
+    function hasMatchingPendingMemberInvite() {
+      return request.resource.data.role == 'member' &&
+        request.resource.data.linkedMemberId is string &&
+        request.resource.data.linkedMemberId != '' &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'memberInvites',
+          request.resource.data.inviteId
+        ).status == 'pending' &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'memberInvites',
+          request.resource.data.inviteId
+        ).emailNormalized == authEmail() &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'memberInvites',
+          request.resource.data.inviteId
+        ).role == 'member' &&
+        inviteDoc(
+          request.resource.data.defaultGymId,
+          'memberInvites',
+          request.resource.data.inviteId
+        ).memberId == request.resource.data.linkedMemberId;
+    }
+
+    function isSafeInviteUserCreate(uid) {
+      return signedIn() &&
+        request.auth.uid == uid &&
+        request.resource.data.keys().hasOnly(allowedUserCreateKeys()) &&
+        request.resource.data.role in ['admin', 'reception', 'coach', 'member'] &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.createdFromInvite == true &&
+        request.resource.data.defaultGymId is string &&
+        request.resource.data.defaultGymId != '' &&
+        request.resource.data.inviteId is string &&
+        request.resource.data.inviteId != '' &&
+        (!('email' in request.resource.data) ||
+          request.resource.data.email == authEmail()) &&
+        (
+          hasMatchingPendingStaffInvite() ||
+          hasMatchingPendingMemberInvite()
+        );
+    }
+
+    function isPendingInviteForAuthEmail() {
+      return signedIn() &&
+        resource.data.status == 'pending' &&
+        resource.data.emailNormalized == authEmail();
+    }
+
+    function isSafeInviteClaimUpdate() {
+      return signedIn() &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'claimed' &&
+        request.resource.data.claimedByUid == request.auth.uid &&
+        hasOnlyAffected(['status', 'claimedAt', 'claimedByUid', 'updatedAt']) &&
+        unchanged('gymId') &&
+        unchanged('role') &&
+        unchanged('emailNormalized');
+    }
+
+    function hasMatchingPendingStaffInviteForStaffCreate(gymId) {
+      return request.resource.data.inviteId is string &&
+        request.resource.data.inviteId != '' &&
+        inviteDoc(gymId, 'staffInvites', request.resource.data.inviteId).status == 'pending' &&
+        inviteDoc(gymId, 'staffInvites', request.resource.data.inviteId).emailNormalized == authEmail() &&
+        inviteDoc(gymId, 'staffInvites', request.resource.data.inviteId).role == request.resource.data.role;
+    }
+
+    function afterUserProfile() {
+      return getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasMatchingPendingMemberInviteForMemberLink(gymId, memberId) {
+      return signedIn() &&
+        afterUserProfile().role == 'member' &&
+        afterUserProfile().status == 'active' &&
+        afterUserProfile().defaultGymId == gymId &&
+        afterUserProfile().linkedMemberId == memberId &&
+        afterUserProfile().inviteId is string &&
+        afterUserProfile().inviteId != '' &&
+        inviteDoc(gymId, 'memberInvites', afterUserProfile().inviteId).status == 'pending' &&
+        inviteDoc(gymId, 'memberInvites', afterUserProfile().inviteId).emailNormalized == authEmail() &&
+        inviteDoc(gymId, 'memberInvites', afterUserProfile().inviteId).role == 'member' &&
+        inviteDoc(gymId, 'memberInvites', afterUserProfile().inviteId).memberId == memberId;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        (
+          isOwnerOrAdmin() &&
+          resource.data.defaultGymId == userGymId()
+        )
+      );
+
+      allow create: if isSafeInviteUserCreate(uid);
+      allow update, delete: if false;
+    }
+
+    match /{path=**}/staffInvites/{inviteId} {
+      allow get, list: if isPendingInviteForAuthEmail();
+      allow update: if isSafeInviteClaimUpdate();
+      allow create, delete: if false;
+    }
+
+    match /{path=**}/memberInvites/{inviteId} {
+      allow get, list: if isPendingInviteForAuthEmail();
+      allow update: if isSafeInviteClaimUpdate();
+      allow create, delete: if false;
+    }
+
+    match /gyms/{gymId} {
+      allow read: if isGymUser(gymId);
+      allow update: if isGymUser(gymId) && isOwnerOrAdmin();
+      allow create, delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isGymUser(gymId) && (
+          isStaffRole() ||
+          isLinkedMember(gymId, memberId)
+        );
+
+        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+
+        allow update: if (
+          isGymUser(gymId) && isOwnerAdminReception()
+        ) || (
+          signedIn() &&
+          request.auth.uid == request.resource.data.authUid &&
+          resource.data.authUid == null &&
+          request.resource.data.accountStatus == 'active' &&
+          request.resource.data.emailNormalized == authEmail() &&
+          hasMatchingPendingMemberInviteForMemberLink(gymId, memberId) &&
+          hasOnlyAffected([
+            'authUid',
+            'email',
+            'emailNormalized',
+            'accountStatus',
+            'updatedAt'
+          ])
+        );
+
+        allow delete: if false;
+      }
+
+      match /staff/{staffId} {
+        allow read: if isGymUser(gymId) && (
+          isOwnerOrAdmin() ||
+          (staffId == request.auth.uid && isStaffRole())
+        );
+
+        allow create: if (
+          isGymUser(gymId) && isOwnerOrAdmin()
+        ) || (
+          signedIn() &&
+          staffId == request.auth.uid &&
+          request.resource.data.authUid == request.auth.uid &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.status == 'active' &&
+          request.resource.data.role in ['admin', 'reception', 'coach'] &&
+          request.resource.data.emailNormalized == authEmail() &&
+          hasMatchingPendingStaffInviteForStaffCreate(gymId)
+        );
+
+        allow update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /staffInvites/{inviteId} {
+        allow get, list: if (
+          isGymUser(gymId) && isOwnerOrAdmin()
+        ) || isPendingInviteForAuthEmail();
+
+        allow create: if isGymUser(gymId) && isOwnerOrAdmin();
+
+        allow update: if (
+          isGymUser(gymId) && isOwnerOrAdmin()
+        ) || isSafeInviteClaimUpdate();
+
+        allow delete: if false;
+      }
+
+      match /memberInvites/{inviteId} {
+        allow get, list: if (
+          isGymUser(gymId) && isOwnerAdminReception()
+        ) || isPendingInviteForAuthEmail();
+
+        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+
+        allow update: if (
+          isGymUser(gymId) && isOwnerAdminReception()
+        ) || isSafeInviteClaimUpdate();
+
+        allow delete: if false;
+      }
+
+      match /plans/{planId} {
+        allow read: if isGymUser(gymId);
+        allow create, update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /subscriptions/{subscriptionId} {
+        allow read: if isGymUser(gymId) && (
+          isOwnerAdminReception() ||
+          (
+            isMember() &&
+            resource.data.memberId == userProfile().linkedMemberId
+          )
+        );
+
+        allow create, update: if isGymUser(gymId) && isOwnerAdminReception();
+        allow delete: if false;
+      }
+
+      match /transactions/{transactionId} {
+        allow read: if isGymUser(gymId) && (
+          isOwnerAdminReception() ||
+          (
+            isMember() &&
+            resource.data.memberId == userProfile().linkedMemberId
+          )
+        );
+
+        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+        allow update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /checkins/{checkinId} {
+        allow read: if isGymUser(gymId) && (
+          isStaffRole() ||
+          (
+            isMember() &&
+            resource.data.memberId == userProfile().linkedMemberId
+          )
+        );
+
+        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+        allow update, delete: if false;
+      }
+
+      match /settings/occupancy {
+        allow read: if isGymUser(gymId);
+        allow update: if isGymUser(gymId) && (
+          (
+            isOwnerOrAdmin() &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['count', 'capacity', 'updatedAt'])
+          ) ||
+          (
+            isReception() &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['count', 'updatedAt'])
+          )
+        );
+        allow create: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /settings/app {
+        allow read: if isGymUser(gymId);
+        allow create, update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /settings/{settingId} {
+        allow read: if isGymUser(gymId);
+        allow create, update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

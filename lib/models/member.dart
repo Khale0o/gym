@@ -61,6 +61,7 @@ class Member {
   final String? currentPlanId;
   final String? currentPlanName;
   final String? subscriptionStatus;
+  final String? paymentStatus;
   final DateTime? subscriptionEndDate;
   final String? gender;
   final DateTime? dateOfBirth;
@@ -90,7 +91,15 @@ class Member {
   final double? muscleMass;
   final List<String> injuries;
   final String? nfcTagId;
+  final String? nfcTagIdNormalized;
   final String? qrCode;
+  final String? qrCodeNormalized;
+  final String? accessCode;
+  final String? accessCodeNormalized;
+  final String? accessStatus;
+  final DateTime? accessAssignedAt;
+  final DateTime? accessUpdatedAt;
+  final String? notes;
   final String? assignedCoachId;
   final String? createdByStaffId;
   final DateTime? createdAt;
@@ -114,6 +123,7 @@ class Member {
     this.currentPlanId,
     this.currentPlanName,
     this.subscriptionStatus,
+    this.paymentStatus,
     this.subscriptionEndDate,
     this.gender,
     this.dateOfBirth,
@@ -143,7 +153,15 @@ class Member {
     this.muscleMass,
     required this.injuries,
     this.nfcTagId,
+    this.nfcTagIdNormalized,
     this.qrCode,
+    this.qrCodeNormalized,
+    this.accessCode,
+    this.accessCodeNormalized,
+    this.accessStatus,
+    this.accessAssignedAt,
+    this.accessUpdatedAt,
+    this.notes,
     this.assignedCoachId,
     this.createdByStaffId,
     this.createdAt,
@@ -173,6 +191,7 @@ class Member {
       currentPlanId: m['currentPlanId'] as String?,
       currentPlanName: m['currentPlanName'] as String?,
       subscriptionStatus: m['subscriptionStatus'] as String?,
+      paymentStatus: m['paymentStatus'] as String?,
       subscriptionEndDate: (m['subscriptionEndDate'] as Timestamp?)?.toDate(),
       gender: m['gender'] as String?,
       dateOfBirth: (m['dateOfBirth'] as Timestamp?)?.toDate(),
@@ -202,7 +221,15 @@ class Member {
       muscleMass: muscleMass,
       injuries: List<String>.from(m['injuries'] ?? []),
       nfcTagId: m['nfcTagId'] as String?,
+      nfcTagIdNormalized: m['nfcTagIdNormalized'] as String?,
       qrCode: m['qrCode'] as String?,
+      qrCodeNormalized: m['qrCodeNormalized'] as String?,
+      accessCode: m['accessCode'] as String?,
+      accessCodeNormalized: m['accessCodeNormalized'] as String?,
+      accessStatus: m['accessStatus'] as String?,
+      accessAssignedAt: (m['accessAssignedAt'] as Timestamp?)?.toDate(),
+      accessUpdatedAt: (m['accessUpdatedAt'] as Timestamp?)?.toDate(),
+      notes: m['notes'] as String?,
       assignedCoachId: m['assignedCoachId'] as String?,
       createdByStaffId: m['createdByStaffId'] as String?,
       createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
@@ -229,6 +256,7 @@ class Member {
         'currentPlanId': currentPlanId,
         'currentPlanName': currentPlanName,
         'subscriptionStatus': subscriptionStatus,
+        'paymentStatus': paymentStatus,
         'subscriptionEndDate': subscriptionEndDate == null
             ? null
             : Timestamp.fromDate(subscriptionEndDate!),
@@ -261,7 +289,19 @@ class Member {
         'muscleMass': muscleMass,
         'injuries': injuries,
         'nfcTagId': nfcTagId,
+        'nfcTagIdNormalized': nfcTagIdNormalized,
         'qrCode': qrCode,
+        'qrCodeNormalized': qrCodeNormalized,
+        'accessCode': accessCode,
+        'accessCodeNormalized': accessCodeNormalized,
+        'accessStatus': accessStatus,
+        'accessAssignedAt': accessAssignedAt == null
+            ? null
+            : Timestamp.fromDate(accessAssignedAt!),
+        'accessUpdatedAt': accessUpdatedAt == null
+            ? null
+            : Timestamp.fromDate(accessUpdatedAt!),
+        'notes': notes,
         'assignedCoachId': assignedCoachId,
         'createdByStaffId': createdByStaffId,
         'createdAt': createdAt == null ? null : Timestamp.fromDate(createdAt!),

@@ -91,6 +91,13 @@ class GymFirestorePaths {
     return gymDoc(gymId).collection('transactions');
   }
 
+  DocumentReference<Map<String, dynamic>> transactionDoc(
+    String gymId,
+    String transactionId,
+  ) {
+    return transactionsCollection(gymId).doc(transactionId);
+  }
+
   CollectionReference<Map<String, dynamic>> productsCollection(String gymId) {
     return gymDoc(gymId).collection('products');
   }
@@ -101,6 +108,10 @@ class GymFirestorePaths {
 
   DocumentReference<Map<String, dynamic>> occupancyDoc(String gymId) {
     return settingsCollection(gymId).doc('occupancy');
+  }
+
+  DocumentReference<Map<String, dynamic>> appSettingsDoc(String gymId) {
+    return settingsCollection(gymId).doc('app');
   }
 
   CollectionReference<Map<String, dynamic>> settingsCollection(String gymId) {

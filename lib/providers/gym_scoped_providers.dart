@@ -1,16 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/models/checkin.dart';
+import 'package:gymsaas/models/dashboard_summary.dart';
+import 'package:gymsaas/models/gym_settings.dart';
 import 'package:gymsaas/models/member.dart';
 import 'package:gymsaas/models/membership_plan.dart';
 import 'package:gymsaas/models/staff.dart';
 import 'package:gymsaas/models/staff_invite.dart';
 import 'package:gymsaas/models/subscription.dart';
+import 'package:gymsaas/models/transaction_model.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
+import 'package:gymsaas/repositories/checkin_repository.dart';
+import 'package:gymsaas/repositories/dashboard_repository.dart';
+import 'package:gymsaas/repositories/gym_settings_repository.dart';
 import 'package:gymsaas/repositories/member_invite_repository.dart';
 import 'package:gymsaas/repositories/member_repository.dart';
 import 'package:gymsaas/repositories/plan_repository.dart';
 import 'package:gymsaas/repositories/staff_repository.dart';
 import 'package:gymsaas/repositories/staff_invite_repository.dart';
 import 'package:gymsaas/repositories/subscription_repository.dart';
+import 'package:gymsaas/repositories/transaction_repository.dart';
 import 'package:gymsaas/services/gym_firestore_paths.dart';
 
 final gymFirestorePathsProvider = Provider<GymFirestorePaths>((ref) {
@@ -28,12 +36,28 @@ final memberInviteRepositoryProvider = Provider<MemberInviteRepository>((ref) {
   );
 });
 
+final checkInRepositoryProvider = Provider<CheckInRepository>((ref) {
+  return CheckInRepository(ref.watch(gymFirestorePathsProvider));
+});
+
+final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
+  return DashboardRepository(ref.watch(gymFirestorePathsProvider));
+});
+
+final gymSettingsRepositoryProvider = Provider<GymSettingsRepository>((ref) {
+  return GymSettingsRepository(ref.watch(gymFirestorePathsProvider));
+});
+
 final planRepositoryProvider = Provider<PlanRepository>((ref) {
   return PlanRepository(ref.watch(gymFirestorePathsProvider));
 });
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>((ref) {
   return SubscriptionRepository(ref.watch(gymFirestorePathsProvider));
+});
+
+final transactionRepositoryProvider = Provider<TransactionRepository>((ref) {
+  return TransactionRepository(ref.watch(gymFirestorePathsProvider));
 });
 
 final staffRepositoryProvider = Provider<StaffRepository>((ref) {
@@ -98,12 +122,53 @@ final gymSubscriptionsProvider = StreamProvider<List<GymSubscription>>((ref) {
   return ref.watch(subscriptionRepositoryProvider).streamSubscriptions(gymId);
 });
 
+final gymTransactionsProvider = StreamProvider<List<GymTransaction>>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(transactionRepositoryProvider).streamTransactions(gymId);
+});
+
+final dashboardSummaryProvider = StreamProvider<DashboardSummary>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(dashboardRepositoryProvider).streamSummary(gymId);
+});
+
+final gymProfileProvider = StreamProvider<GymProfileSettings>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(gymSettingsRepositoryProvider).streamGymProfile(gymId);
+});
+
+final occupancySettingsProvider = StreamProvider<OccupancySettings>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(gymSettingsRepositoryProvider).streamOccupancySettings(gymId);
+});
+
+final appSettingsProvider = StreamProvider<AppSettings>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(gymSettingsRepositoryProvider).streamAppSettings(gymId);
+});
+
+final memberTransactionsProvider =
+    StreamProvider.family<List<GymTransaction>, String>((ref, memberId) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref
+      .watch(transactionRepositoryProvider)
+      .streamMemberTransactions(gymId, memberId);
+});
+
 final memberSubscriptionsProvider =
     StreamProvider.family<List<GymSubscription>, String>((ref, memberId) {
   final gymId = _requireCurrentGymId(ref);
   return ref
       .watch(subscriptionRepositoryProvider)
       .streamMemberSubscriptions(gymId, memberId);
+});
+
+final memberCheckinsProvider =
+    StreamProvider.family<List<CheckIn>, String>((ref, memberId) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref
+      .watch(checkInRepositoryProvider)
+      .streamMemberCheckins(gymId, memberId);
 });
 
 final activeMemberSubscriptionProvider =

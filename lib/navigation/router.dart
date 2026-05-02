@@ -12,7 +12,9 @@ import 'package:gymsaas/screens/login/login_screen.dart';
 import 'package:gymsaas/screens/member_app/member_app_screen.dart';
 import 'package:gymsaas/screens/members/member_detail_screen.dart';
 import 'package:gymsaas/screens/members/members_screen.dart';
+import 'package:gymsaas/screens/payments/payments_screen.dart';
 import 'package:gymsaas/screens/plans/plans_screen.dart';
+import 'package:gymsaas/screens/settings/gym_settings_screen.dart';
 import 'package:gymsaas/screens/staff/staff_management_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -126,12 +128,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const ErpScreen(),
           ),
           GoRoute(
+            path: paymentsRoute,
+            builder: (_, __) => const PaymentsScreen(),
+          ),
+          GoRoute(
             path: staffManagementRoute,
             builder: (_, __) => const StaffManagementScreen(),
           ),
           GoRoute(
             path: plansRoute,
             builder: (_, __) => const PlansScreen(),
+          ),
+          GoRoute(
+            path: settingsRoute,
+            builder: (_, __) => const GymSettingsScreen(),
           ),
           GoRoute(
             path: '/member-app',

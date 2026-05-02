@@ -44,6 +44,20 @@ class StaffInviteSignupController {
         _debugLog('Signing out old currentUser before invite signup.');
         await _auth.signOut();
       }
+      _debugLog('Firebase Auth createUserWithEmailAndPassword starting.');
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+      createdUser = credential.user;
+
+      if (createdUser == null) {
+        throw StateError('Account creation failed. Please try again.');
+      }
+
+      _debugLog('Firebase Auth user created with uid: ${createdUser.uid}');
+      _debugLog('credential.user.uid after Auth creation: ${createdUser.uid}');
+      await createdUser.updateDisplayName(fullName.trim());
       _debugLog('Normalized email being searched: $normalizedEmail');
       _debugLog('Pending invite lookup starting.');
       final staffTarget = await _staffInvites
@@ -71,20 +85,6 @@ class StaffInviteSignupController {
       _debugLog(
         'Claiming email $normalizedEmail with invite $inviteId and gymId $gymId.',
       );
-      _debugLog('Firebase Auth createUserWithEmailAndPassword starting.');
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: normalizedEmail,
-        password: password,
-      );
-      createdUser = credential.user;
-
-      if (createdUser == null) {
-        throw StateError('Account creation failed. Please try again.');
-      }
-
-      _debugLog('Firebase Auth user created with uid: ${createdUser.uid}');
-      _debugLog('credential.user.uid after Auth creation: ${createdUser.uid}');
-      await createdUser.updateDisplayName(fullName.trim());
       _debugLog('Claim transaction request starting.');
       if (isMemberInvite) {
         await _memberInvites.claimMemberInvite(

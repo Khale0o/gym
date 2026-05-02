@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/models/member_access_eligibility.dart';
+import 'package:gymsaas/models/member.dart';
+import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/occupancy_provider.dart';
 import 'package:gymsaas/providers/checkins_provider.dart';
-import 'package:gymsaas/providers/members_provider.dart';
+import 'package:gymsaas/providers/gym_scoped_providers.dart';
+import 'package:gymsaas/repositories/member_repository.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
 import 'package:gymsaas/widgets/apex_card.dart';
@@ -24,7 +28,9 @@ class CheckInScreen extends ConsumerStatefulWidget {
 
 class _CheckInScreenState extends ConsumerState<CheckInScreen>
     with SingleTickerProviderStateMixin {
+  final _accessCodeController = TextEditingController();
   bool _scanning = false;
+  bool _checkingIn = false;
   bool _success = false;
   String? _scannedName;
   String? _scannedPlan;
@@ -45,6 +51,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
 
   @override
   void dispose() {
+    _accessCodeController.dispose();
     _scanCtrl.dispose();
     super.dispose();
   }
@@ -60,36 +67,59 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   }
 
   Future<void> _changeOccupancy(double nextCount) async {
+    final gymId = ref.read(currentGymIdProvider)?.trim();
+    if (gymId == null || gymId.isEmpty) {
+      _showError('Missing gym context.');
+      return;
+    }
+
     try {
-      await updateOccupancy(nextCount);
+      await ref
+          .read(checkInRepositoryProvider)
+          .setOccupancy(gymId, nextCount.clamp(0.0, gymCapacity.toDouble()));
     } catch (error) {
       _showError(error.toString().replaceFirst('StateError: ', ''));
     }
   }
 
   Future<void> _simulateScan() async {
-    if (_scanning) return;
+    if (_scanning || _checkingIn) return;
 
     setState(() {
       _scanning = true;
       _success = false;
       _scannedName = null;
+      _scannedPlan = null;
     });
 
     await Future.delayed(const Duration(milliseconds: 1800));
 
-    final members = ref.read(membersProvider).asData?.value ?? [];
+    final gymId = ref.read(currentGymIdProvider)?.trim();
+    if (gymId == null || gymId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _scanning = false);
+      _showError('Missing gym context.');
+      return;
+    }
+
+    final members = ref.read(gymMembersProvider).asData?.value ?? [];
 
     if (members.isNotEmpty && mounted) {
       final m = members[Random().nextInt(members.length)];
 
       try {
-        await addCheckIn(
+        final admission = await ref.read(checkInRepositoryProvider).checkInMember(
+          gymId: gymId,
           memberId: m.id,
-          name: m.name,
           method: 'NFC',
-          plan: m.plan,
         );
+        if (!mounted) return;
+        setState(() {
+          _scanning = false;
+          _success = true;
+          _scannedName = admission.memberName;
+          _scannedPlan = admission.planName;
+        });
       } catch (error) {
         if (!mounted) return;
         setState(() => _scanning = false);
@@ -97,19 +127,93 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
         return;
       }
 
-      setState(() {
-        _scanning = false;
-        _success = true;
-        _scannedName = m.name;
-        _scannedPlan = m.plan;
-      });
-
       Future.delayed(const Duration(seconds: 4), () {
         if (mounted) setState(() => _success = false);
       });
     } else {
       setState(() => _scanning = false);
     }
+  }
+
+  Future<void> _checkInByAccessCode() async {
+    if (_checkingIn || _scanning) return;
+
+    final code = _accessCodeController.text.trim();
+    if (code.isEmpty) {
+      _showError('Enter or scan an access code.');
+      return;
+    }
+
+    final gymId = ref.read(currentGymIdProvider)?.trim();
+    if (gymId == null || gymId.isEmpty) {
+      _showError('Missing gym context.');
+      return;
+    }
+
+    setState(() {
+      _checkingIn = true;
+      _success = false;
+      _scannedName = null;
+      _scannedPlan = null;
+    });
+
+    try {
+      final member = await ref.read(memberRepositoryProvider).findMemberByAccessCode(
+            gymId: gymId,
+            code: code,
+          );
+      if (member == null) {
+        throw StateError('Access code not found');
+      }
+
+      final accessMessage = blockedAccessStatusMessage(member.accessStatus);
+      if (accessMessage != null) {
+        throw StateError(accessMessage);
+      }
+
+      final admission = await ref.read(checkInRepositoryProvider).checkInMember(
+            gymId: gymId,
+            memberId: member.id,
+            method: _accessMethodFor(member, code),
+          );
+      if (!mounted) return;
+      setState(() {
+        _checkingIn = false;
+        _success = true;
+        _scannedName = admission.memberName;
+        _scannedPlan = admission.planName;
+      });
+      _accessCodeController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Check-in successful: ${admission.memberName}'),
+          backgroundColor: greenSuccess,
+        ),
+      );
+
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _success = false);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _checkingIn = false);
+      _showError(error.toString().replaceFirst('StateError: ', ''));
+    }
+  }
+
+  String _accessMethodFor(Member member, String code) {
+    final normalized = MemberRepository.normalizeAccessIdentifier(code);
+    if (normalized != null &&
+        MemberRepository.normalizeAccessIdentifier(member.nfcTagId) ==
+            normalized) {
+      return 'NFC';
+    }
+    if (normalized != null &&
+        MemberRepository.normalizeAccessIdentifier(member.qrCode) ==
+            normalized) {
+      return 'QR';
+    }
+    return 'Access Code';
   }
 
   @override
@@ -256,10 +360,10 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   /// 🔴 NFC — FULL ORIGINAL WITH SUCCESS MESSAGE
   Widget _buildNFC() {
     return ApexCard(
-      glow: _scanning,
+      glow: _scanning || _checkingIn,
       child: Column(
         children: [
-          const GoldHeading('NFC Scanner'),
+          const GoldHeading('Access Check-in'),
           const SizedBox(height: 24),
           GestureDetector(
             onTap: _simulateScan,
@@ -320,6 +424,70 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
             ),
           ),
           const SizedBox(height: 20),
+          TextField(
+            controller: _accessCodeController,
+            enabled: !_checkingIn && !_scanning,
+            style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 13),
+            decoration: InputDecoration(
+              labelText: 'Scan NFC / QR / Access Code',
+              labelStyle: const TextStyle(
+                color: Color(0xFF777777),
+                fontSize: 12,
+              ),
+              prefixIcon: const Icon(
+                Icons.qr_code_scanner_rounded,
+                color: Color(0xFF555555),
+                size: 18,
+              ),
+              filled: true,
+              fillColor: card2Dark,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: borderDark),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: borderDark),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: gold),
+              ),
+            ),
+            onSubmitted: (_) => _checkInByAccessCode(),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _checkingIn || _scanning ? null : _checkInByAccessCode,
+              icon: _checkingIn
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF080808),
+                      ),
+                    )
+                  : const Icon(Icons.login_rounded, size: 18),
+              label: ApexText(
+                _checkingIn ? 'Checking' : 'Check In',
+                fontSize: 12,
+                color: const Color(0xFF080808),
+                fontWeight: FontWeight.w700,
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: gold,
+                foregroundColor: const Color(0xFF080808),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           // رسالة النجاح الأصلية
           if (_success && _scannedName != null) ...[
             Container(
@@ -347,9 +515,11 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
             ),
           ] else
             ApexText(
-              _scanning ? 'Scanning NFC…' : 'Tap to simulate NFC scan',
+              _checkingIn || _scanning
+                  ? 'Validating access...'
+                  : 'Tap scanner circle for demo/test random check-in',
               fontSize: 12,
-              color: _scanning ? gold : const Color(0xFF555555),
+              color: _checkingIn || _scanning ? gold : const Color(0xFF555555),
             ),
         ],
       ),

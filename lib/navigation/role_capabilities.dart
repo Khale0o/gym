@@ -23,6 +23,18 @@ class RoleCapabilities {
         _normalized(role) == AppRoles.reception;
   }
 
+  static bool canEditMember(String role) {
+    return _normalized(role) == AppRoles.owner ||
+        _normalized(role) == AppRoles.admin ||
+        _normalized(role) == AppRoles.reception;
+  }
+
+  static bool canManageMemberAccess(String role) {
+    return _normalized(role) == AppRoles.owner ||
+        _normalized(role) == AppRoles.admin ||
+        _normalized(role) == AppRoles.reception;
+  }
+
   static bool canCreateStaff(String role) {
     return _normalized(role) == AppRoles.owner ||
         _normalized(role) == AppRoles.admin;
@@ -93,6 +105,11 @@ class RoleCapabilities {
   }
 
   static bool canManagePlans(String role) {
+    return _normalized(role) == AppRoles.owner ||
+        _normalized(role) == AppRoles.admin;
+  }
+
+  static bool canManageSettings(String role) {
     return _normalized(role) == AppRoles.owner ||
         _normalized(role) == AppRoles.admin;
   }

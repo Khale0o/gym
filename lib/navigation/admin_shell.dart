@@ -22,6 +22,8 @@ const _navItems = [
   _NavItem('Check-in', Icons.nfc_rounded, checkinRoute),
   _NavItem('Staff', Icons.manage_accounts_rounded, staffManagementRoute),
   _NavItem('Plans', Icons.workspace_premium_rounded, plansRoute),
+  _NavItem('Payments', Icons.point_of_sale_rounded, paymentsRoute),
+  _NavItem('Settings', Icons.settings_rounded, settingsRoute),
   _NavItem('Finance', Icons.account_balance_wallet_rounded, financeRoute),
   _NavItem('Member App', Icons.phone_android_rounded, memberAppRoute),
   _NavItem('AI Engine', Icons.auto_awesome_rounded, aiRoute),

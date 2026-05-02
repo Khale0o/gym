@@ -1,34 +1,30 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/providers/auth_provider.dart';
+import 'package:gymsaas/providers/gym_scoped_providers.dart';
 
-/// Stream of the current occupancy count from `occupancy/current`.
+/// Stream of the current gym occupancy from `gyms/{gymId}/settings/occupancy`.
 final occupancyStreamProvider = StreamProvider<double>((ref) {
-  return FirebaseFirestore.instance.doc('occupancy/current').snapshots().map((snap) {
-    if (!snap.exists) return 0.0;
-    final data = snap.data() as Map<String, dynamic>;
-    return (data['count'] ?? 0).toDouble();
-  });
+  final gymId = ref.watch(currentGymIdProvider)?.trim();
+  if (gymId == null || gymId.isEmpty) {
+    throw StateError('Missing gym context for occupancy.');
+  }
+  return ref.watch(checkInRepositoryProvider).streamOccupancy(gymId);
 });
 
-/// Writes a new occupancy count to Firestore safely.
+/// Legacy helper retained for older screens that have not been migrated yet.
+/// The Phase 2F check-in screen uses the gym-scoped repository directly.
 Future<void> updateOccupancy(double count) async {
   final db = FirebaseFirestore.instance;
   final occupancyRef = db.doc('occupancy/current');
-  final nextCount = count.round().clamp(0, 1 << 30);
+  final safeCount = count.round().clamp(0, 1 << 30);
 
   try {
     await db.runTransaction((transaction) async {
-      final snap = await transaction.get(occupancyRef);
-      final currentData = snap.data();
-      final currentCount = (currentData?['count'] ?? 0).toInt();
-      final safeCount = nextCount < 0 ? 0 : nextCount;
-
+      await transaction.get(occupancyRef);
       transaction.set(
         occupancyRef,
-        {
-          'count': safeCount < 0 ? 0 : safeCount,
-          if (!snap.exists && currentCount == 0) 'createdAt': Timestamp.now(),
-        },
+        {'count': safeCount},
         SetOptions(merge: true),
       );
     });

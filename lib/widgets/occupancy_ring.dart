@@ -1,10 +1,9 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 
-/// Animated circular occupancy gauge with ripple effect when >= 80%.
-class OccupancyRing extends StatefulWidget {
+/// Circular occupancy gauge built from standard Flutter widgets.
+class OccupancyRing extends StatelessWidget {
   final double current;
   final int capacity;
   final bool compact;
@@ -16,59 +15,34 @@ class OccupancyRing extends StatefulWidget {
     this.compact = false,
   });
 
-  @override
-  State<OccupancyRing> createState() => _OccupancyRingState();
-}
+  double get _safeCurrent => _safeDouble(current);
+  int get _safeCapacity => capacity < 0 ? 0 : capacity;
+  double get _progress => _safeProgress(_safeCurrent, _safeCapacity);
+  double get _pct => _progress * 100;
 
-class _OccupancyRingState extends State<OccupancyRing>
-    with TickerProviderStateMixin {
-  late AnimationController _arcCtrl;
-  late Animation<double> _arcAnim;
-  late AnimationController _rippleCtrl;
-
-  double get _pct =>
-      widget.capacity > 0 ? (widget.current / widget.capacity * 100) : 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _arcCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900));
-    _arcAnim = Tween<double>(begin: 0, end: _pct / 100).animate(
-      CurvedAnimation(parent: _arcCtrl, curve: Curves.easeOut),
-    );
-    _arcCtrl.forward();
-
-    _rippleCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1400))
-      ..repeat();
+  static double _safeDouble(double value) {
+    if (!value.isFinite || value < 0) return 0;
+    return value;
   }
 
-  @override
-  void didUpdateWidget(covariant OccupancyRing old) {
-    super.didUpdateWidget(old);
-    _arcAnim = Tween<double>(begin: _arcAnim.value, end: _pct / 100).animate(
-      CurvedAnimation(parent: _arcCtrl, curve: Curves.easeOut),
-    );
-    _arcCtrl
-      ..reset()
-      ..forward();
-  }
+  static double _safeProgress(double current, int capacity) {
+    if (!current.isFinite || current < 0 || capacity <= 0) return 0;
 
-  @override
-  void dispose() {
-    _arcCtrl.dispose();
-    _rippleCtrl.dispose();
-    super.dispose();
-  }
+    final progress = current / capacity;
+    if (!progress.isFinite || progress < 0) return 0;
 
-  Color get _color => ocColor(_pct);
-  String get _label => ocLabel(_pct);
+    return progress.clamp(0.0, 1.0);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.compact ? 100.0 : 160.0;
-    final strokeW = widget.compact ? 8.0 : 12.0;
+    final size = compact ? 100.0 : 160.0;
+    final strokeWidth = compact ? 8.0 : 12.0;
+    final color = ocColor(_pct);
+    final label = ocLabel(_pct);
+    final displayCurrent = _safeCurrent.round();
+    final displayCapacity = _safeCapacity;
+    final displayPercent = _pct.round();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -76,34 +50,50 @@ class _OccupancyRingState extends State<OccupancyRing>
         SizedBox(
           width: size,
           height: size,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_arcAnim, _rippleCtrl]),
-            builder: (_, __) => CustomPaint(
-              painter: _RingPainter(
-                progress: _arcAnim.value,
-                color: _color,
-                strokeWidth: strokeW,
-                ripple: _pct >= 80 ? _rippleCtrl.value : null,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ApexText(
-                      '${widget.current.round()}',
-                      fontSize: widget.compact ? 20 : 30,
-                      color: const Color(0xFFE8E8E8),
-                      fontWeight: FontWeight.w700,
-                    ),
-                    ApexText(
-                      '/ ${widget.capacity}',
-                      fontSize: widget.compact ? 9 : 11,
-                      color: const Color(0xFF555555),
-                    ),
-                  ],
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox.expand(
+                child: CircularProgressIndicator(
+                  value: 1,
+                  strokeWidth: strokeWidth,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF1A1A1A),
+                  ),
+                  strokeCap: StrokeCap.round,
                 ),
               ),
-            ),
+              SizedBox.expand(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: _progress),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOut,
+                  builder: (_, value, __) => CircularProgressIndicator(
+                    value: value.clamp(0.0, 1.0),
+                    strokeWidth: strokeWidth,
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                    backgroundColor: Colors.transparent,
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ApexText(
+                    '$displayCurrent',
+                    fontSize: compact ? 20 : 30,
+                    color: const Color(0xFFE8E8E8),
+                    fontWeight: FontWeight.w700,
+                  ),
+                  ApexText(
+                    '/ $displayCapacity',
+                    fontSize: compact ? 9 : 11,
+                    color: const Color(0xFF555555),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -113,14 +103,13 @@ class _OccupancyRingState extends State<OccupancyRing>
             Container(
               width: 6,
               height: 6,
-              decoration: BoxDecoration(
-                  color: _color, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 6),
             ApexText(
-              '$_label · ${_pct.round()}%',
-              fontSize: widget.compact ? 10 : 12,
-              color: _color,
+              '$label - $displayPercent%',
+              fontSize: compact ? 10 : 12,
+              color: color,
               fontWeight: FontWeight.w600,
             ),
           ],
@@ -128,66 +117,4 @@ class _OccupancyRingState extends State<OccupancyRing>
       ],
     );
   }
-}
-
-class _RingPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final double strokeWidth;
-  final double? ripple;
-
-  const _RingPainter({
-    required this.progress,
-    required this.color,
-    required this.strokeWidth,
-    this.ripple,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-
-    // Ripple effect
-    if (ripple != null) {
-      final ripplePaint = Paint()
-        ..color = color.withOpacity((1 - ripple!) * 0.3)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth * (1 + ripple! * 1.5);
-      canvas.drawCircle(center, radius, ripplePaint);
-    }
-
-    // Background track
-    final trackPaint = Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(center, radius, trackPaint);
-
-    // Gradient arc
-    final arcPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        startAngle: -math.pi / 2,
-        endAngle: -math.pi / 2 + math.pi * 2 * progress,
-        colors: [color.withOpacity(0.7), color],
-        tileMode: TileMode.clamp,
-      ).createShader(
-          Rect.fromCircle(center: center, radius: radius));
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2,
-      math.pi * 2 * progress,
-      false,
-      arcPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RingPainter old) =>
-      old.progress != progress || old.ripple != ripple;
 }
