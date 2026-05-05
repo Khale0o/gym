@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/models/staff.dart';
 import 'package:gymsaas/models/staff_invite.dart';
@@ -131,7 +132,7 @@ class _LinkedStaffSection extends StatelessWidget {
     return staffAsync.when(
       loading: () => const _LoadingList(),
       error: (error, _) => Center(
-        child: ApexText('Error: $error', color: redAlert),
+        child: ApexText(friendlyFirestoreErrorMessage(error), color: redAlert),
       ),
       data: (staff) {
         if (staff.isEmpty) {
@@ -167,7 +168,7 @@ class _PendingInvitesSection extends ConsumerWidget {
     return invitesAsync.when(
       loading: () => const _LoadingList(),
       error: (error, _) => Center(
-        child: ApexText('Error: $error', color: redAlert),
+        child: ApexText(friendlyFirestoreErrorMessage(error), color: redAlert),
       ),
       data: (invites) {
         final pending = invites
@@ -235,7 +236,11 @@ class _PendingInvitesSection extends ConsumerWidget {
       _showSnack(context, 'Invite cancelled.', greenSuccess);
     } catch (error) {
       if (!context.mounted) return;
-      _showSnack(context, 'Could not cancel invite: $error', redAlert);
+      _showSnack(
+        context,
+        'Could not cancel invite: ${friendlyFirestoreErrorMessage(error)}',
+        redAlert,
+      );
     }
   }
 }
@@ -626,7 +631,11 @@ class _InviteStaffDialogState extends ConsumerState<_InviteStaffDialog> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showSnack(context, 'Could not create invite: $error', redAlert);
+      _showSnack(
+        context,
+        'Could not create invite: ${friendlyFirestoreErrorMessage(error)}',
+        redAlert,
+      );
       setState(() => _saving = false);
     }
   }

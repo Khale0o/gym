@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
 import 'package:gymsaas/models/gym_settings.dart';
@@ -256,7 +257,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showError(error.toString().replaceFirst('StateError: ', ''));
+      _showError(friendlyFirestoreErrorMessage(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -688,7 +689,10 @@ class _TransactionsList extends StatelessWidget {
                 ),
               ),
             ),
-            error: (error, _) => ApexText('Error: $error', color: redAlert),
+            error: (error, _) => ApexText(
+              friendlyFirestoreErrorMessage(error),
+              color: redAlert,
+            ),
             data: (transactions) {
               if (transactions.isEmpty) {
                 return const ApexText(

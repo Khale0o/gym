@@ -85,6 +85,19 @@ class GymFirestorePaths {
     return gymDoc(gymId).collection('checkins');
   }
 
+  CollectionReference<Map<String, dynamic>> attendanceSessionsCollection(
+    String gymId,
+  ) {
+    return gymDoc(gymId).collection('attendanceSessions');
+  }
+
+  DocumentReference<Map<String, dynamic>> attendanceSessionDoc(
+    String gymId,
+    String sessionId,
+  ) {
+    return attendanceSessionsCollection(gymId).doc(sessionId);
+  }
+
   CollectionReference<Map<String, dynamic>> transactionsCollection(
     String gymId,
   ) {
@@ -100,6 +113,50 @@ class GymFirestorePaths {
 
   CollectionReference<Map<String, dynamic>> productsCollection(String gymId) {
     return gymDoc(gymId).collection('products');
+  }
+
+  DocumentReference<Map<String, dynamic>> productDoc(
+    String gymId,
+    String productId,
+  ) {
+    return productsCollection(gymId).doc(productId);
+  }
+
+  CollectionReference<Map<String, dynamic>> productSalesCollection(
+    String gymId,
+  ) {
+    return gymDoc(gymId).collection('productSales');
+  }
+
+  DocumentReference<Map<String, dynamic>> productSaleDoc(
+    String gymId,
+    String saleId,
+  ) {
+    return productSalesCollection(gymId).doc(saleId);
+  }
+
+  CollectionReference<Map<String, dynamic>> expensesCollection(String gymId) {
+    return gymDoc(gymId).collection('expenses');
+  }
+
+  DocumentReference<Map<String, dynamic>> expenseDoc(
+    String gymId,
+    String expenseId,
+  ) {
+    return expensesCollection(gymId).doc(expenseId);
+  }
+
+  CollectionReference<Map<String, dynamic>> staffPayrollCollection(
+    String gymId,
+  ) {
+    return gymDoc(gymId).collection('staffPayroll');
+  }
+
+  DocumentReference<Map<String, dynamic>> staffPayrollDoc(
+    String gymId,
+    String payrollId,
+  ) {
+    return staffPayrollCollection(gymId).doc(payrollId);
   }
 
   CollectionReference<Map<String, dynamic>> shiftsCollection(String gymId) {

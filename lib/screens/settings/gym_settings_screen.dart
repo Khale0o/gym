@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/models/gym_settings.dart';
 import 'package:gymsaas/navigation/role_capabilities.dart';
@@ -57,14 +58,17 @@ class GymSettingsScreen extends ConsumerWidget {
                   final isNarrow = constraints.maxWidth < 900;
                   final profileCard = gymProfile.when(
                     loading: () => const ShimmerCard(),
-                    error: (error, _) =>
-                        _SettingsError(message: 'Gym profile unavailable: $error'),
+                    error: (error, _) => _SettingsError(
+                      message:
+                          'Gym profile unavailable: ${friendlyFirestoreErrorMessage(error)}',
+                    ),
                     data: (settings) => _GymProfileCard(settings: settings),
                   );
                   final occupancyCard = occupancy.when(
                     loading: () => const ShimmerCard(),
                     error: (error, _) => _SettingsError(
-                      message: 'Occupancy settings unavailable: $error',
+                      message:
+                          'Occupancy settings unavailable: ${friendlyFirestoreErrorMessage(error)}',
                     ),
                     data: (settings) =>
                         _OccupancySettingsCard(settings: settings),
@@ -72,7 +76,8 @@ class GymSettingsScreen extends ConsumerWidget {
                   final appCard = appSettings.when(
                     loading: () => const ShimmerCard(),
                     error: (error, _) => _SettingsError(
-                      message: 'Business settings unavailable: $error',
+                      message:
+                          'Business settings unavailable: ${friendlyFirestoreErrorMessage(error)}',
                     ),
                     data: (settings) => _AppSettingsCard(settings: settings),
                   );
@@ -219,7 +224,10 @@ class _GymProfileCardState extends ConsumerState<_GymProfileCard> {
       _showSuccess(context, 'Gym profile saved.');
     } catch (error) {
       if (!mounted) return;
-      _showError(context, 'Could not save gym profile: $error');
+      _showError(
+        context,
+        'Could not save gym profile: ${friendlyFirestoreErrorMessage(error)}',
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -317,7 +325,10 @@ class _OccupancySettingsCardState
       _showSuccess(context, 'Occupancy settings saved.');
     } catch (error) {
       if (!mounted) return;
-      _showError(context, 'Could not save occupancy settings: $error');
+      _showError(
+        context,
+        'Could not save occupancy settings: ${friendlyFirestoreErrorMessage(error)}',
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -434,7 +445,10 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
       _showSuccess(context, 'Business settings saved.');
     } catch (error) {
       if (!mounted) return;
-      _showError(context, 'Could not save business settings: $error');
+      _showError(
+        context,
+        'Could not save business settings: ${friendlyFirestoreErrorMessage(error)}',
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

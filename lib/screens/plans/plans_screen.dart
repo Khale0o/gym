@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/models/membership_plan.dart';
 import 'package:gymsaas/navigation/role_capabilities.dart';
@@ -97,7 +98,10 @@ class PlansScreen extends ConsumerWidget {
                   itemBuilder: (_, __) => const ShimmerCard(),
                 ),
                 error: (error, _) => Center(
-                  child: ApexText('Error: $error', color: redAlert),
+                  child: ApexText(
+                    friendlyFirestoreErrorMessage(error),
+                    color: redAlert,
+                  ),
                 ),
                 data: (plans) {
                   if (plans.isEmpty) {
@@ -135,7 +139,9 @@ class PlansScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not create defaults: $error'),
+          content: Text(
+            'Could not create defaults: ${friendlyFirestoreErrorMessage(error)}',
+          ),
           backgroundColor: redAlert,
         ),
       );
@@ -275,21 +281,34 @@ class _PlanDialogState extends ConsumerState<_PlanDialog> {
       return;
     }
     setState(() => _saving = true);
-    await ref.read(planRepositoryProvider).createPlan(gymId, {
-      'name': name,
-      'description': _description.text.trim().isEmpty
-          ? null
-          : _description.text.trim(),
-      'price': price,
-      'currency': 'EGP',
-      'durationDays': duration,
-      'features': <String>[],
-      'isActive': _isActive,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (!mounted) return;
-    Navigator.of(context).pop();
+    try {
+      await ref.read(planRepositoryProvider).createPlan(gymId, {
+        'name': name,
+        'description': _description.text.trim().isEmpty
+            ? null
+            : _description.text.trim(),
+        'price': price,
+        'currency': 'EGP',
+        'durationDays': duration,
+        'features': <String>[],
+        'isActive': _isActive,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not save plan: ${friendlyFirestoreErrorMessage(error)}',
+          ),
+          backgroundColor: redAlert,
+        ),
+      );
+      setState(() => _saving = false);
+    }
   }
 }
 

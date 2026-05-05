@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
@@ -100,7 +101,10 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                   itemBuilder: (_, __) => const ShimmerCard(),
                 ),
                 error: (e, _) => Center(
-                  child: ApexText('Error: $e', color: redAlert),
+                  child: ApexText(
+                    friendlyFirestoreErrorMessage(e),
+                    color: redAlert,
+                  ),
                 ),
                 data: (members) {
                   final filtered = _query.isEmpty
@@ -783,7 +787,9 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
       );
     } catch (error) {
       if (!mounted) return;
-      _showError('Could not create member: $error');
+      _showError(
+        'Could not create member: ${friendlyFirestoreErrorMessage(error)}',
+      );
       setState(() => _saving = false);
     }
   }

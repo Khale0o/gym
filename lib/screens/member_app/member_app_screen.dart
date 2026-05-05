@@ -1,13 +1,45 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/models/attendance_session.dart';
+import 'package:gymsaas/models/effective_subscription_status.dart';
+import 'package:gymsaas/models/gym_settings.dart';
+import 'package:gymsaas/models/member_access_eligibility.dart';
+import 'package:gymsaas/models/member.dart';
+import 'package:gymsaas/models/transaction_model.dart';
+import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/gym_scoped_providers.dart';
+import 'package:gymsaas/widgets/apex_badge.dart';
+import 'package:gymsaas/widgets/apex_card.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
-import 'package:gymsaas/widgets/apex_progress_bar.dart';
-import 'package:gymsaas/widgets/occupancy_ring.dart';
-import 'package:gymsaas/widgets/hourly_chart.dart';
-import 'package:gymsaas/widgets/line_chart_widget.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+final _memberGymDisplayProvider =
+    StreamProvider.family<_MemberGymDisplay, String>((ref, gymId) {
+  return ref
+      .watch(firestoreProvider)
+      .collection('gyms')
+      .doc(gymId)
+      .snapshots()
+      .map((doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    return _MemberGymDisplay(
+      name: ((data['name'] as String?) ??
+              (data['gymName'] as String?) ??
+              (data['displayName'] as String?) ??
+              'Your Gym')
+          .trim(),
+    );
+  });
+});
+
+class _MemberGymDisplay {
+  const _MemberGymDisplay({required this.name});
+
+  final String name;
+}
 
 class MemberAppScreen extends ConsumerStatefulWidget {
   const MemberAppScreen({super.key});
@@ -21,263 +53,214 @@ class _MemberAppScreenState extends ConsumerState<MemberAppScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final memberAsync = ref.watch(currentLinkedMemberProvider);
+    final profileAsync = ref.watch(currentUserProfileProvider);
+
     return Scaffold(
       backgroundColor: bgDark,
-      body: memberAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: gold)),
-        error: (error, _) => Center(
-          child: ApexText(
-            'Member profile could not be loaded: $error',
-            color: redAlert,
-            textAlign: TextAlign.center,
-          ),
+      body: profileAsync.when(
+        loading: () =>
+            const Center(child: CircularProgressIndicator(color: gold)),
+        error: (error, _) => _FullScreenMessage(
+          _friendlyFirestoreError(error),
+          color: redAlert,
         ),
-        data: (member) {
-          if (member == null) {
-            return const Center(
-              child: ApexText(
-                'No linked member profile found for this account.',
-                color: Color(0xFF888888),
-                textAlign: TextAlign.center,
-              ),
+        data: (profile) {
+          final gymId = profile?.defaultGymId?.trim() ?? '';
+          final linkedMemberId = profile?.linkedMemberId?.trim() ?? '';
+
+          if (profile == null || gymId.isEmpty) {
+            return const _FullScreenMessage(
+              'Your gym profile is incomplete. Please contact the gym.',
             );
           }
-          return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const GoldHeading('Member App Preview', fontSize: 16),
-            const SizedBox(height: 4),
-            const ApexText('Mobile simulation — Ahmed Khalil\'s view',
-                fontSize: 11, color: Color(0xFF555555)),
-            const SizedBox(height: 20),
-            // Phone frame
-            Container(
-              width: 360,
-              height: 720,
-              decoration: BoxDecoration(
-                color: const Color(0xFF080808),
-                borderRadius: BorderRadius.circular(44),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: gold.withOpacity(0.08),
-                    blurRadius: 40,
-                    spreadRadius: 4,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(41),
-                child: Column(
-                  children: [
-                    // Notch
-                    Container(
-                      height: 36,
-                      color: const Color(0xFF050505),
-                      child: Center(
-                        child: Container(
-                          width: 100,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+          if (linkedMemberId.isEmpty) {
+            return const _FullScreenMessage(
+              'Your member profile is not linked yet. Please contact the gym.',
+            );
+          }
+
+          final memberAsync = ref.watch(gymMemberByIdProvider(linkedMemberId));
+          final attendanceAsync =
+              ref.watch(memberAttendanceSessionsProvider(linkedMemberId));
+          final transactionsAsync =
+              ref.watch(memberTransactionsProvider(linkedMemberId));
+          final gymDisplayAsync = ref.watch(_memberGymDisplayProvider(gymId));
+          final occupancyAsync = ref.watch(occupancySettingsProvider);
+
+          return memberAsync.when(
+            loading: () =>
+                const Center(child: CircularProgressIndicator(color: gold)),
+            error: (error, _) => _FullScreenMessage(
+              _friendlyFirestoreError(error),
+              color: redAlert,
+            ),
+            data: (member) {
+              if (member == null) {
+                return const _FullScreenMessage(
+                  'Member profile not found. Please contact the gym.',
+                );
+              }
+
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF080808),
+                        borderRadius: BorderRadius.circular(32),
+                        border: Border.all(
+                          color: const Color(0xFF2A2A2A),
+                          width: 2,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(30),
+                        child: Column(
+                          children: [
+                            const _PhoneNotch(),
+                            Expanded(
+                              child: IndexedStack(
+                                index: _tab,
+                                children: [
+                                  _MemberHomeTab(
+                                    member: member,
+                                    attendanceAsync: attendanceAsync,
+                                    occupancyAsync: occupancyAsync,
+                                  ),
+                                  _AttendanceTab(async: attendanceAsync),
+                                  _PaymentsTab(async: transactionsAsync),
+                                  _AccessTab(
+                                    member: member,
+                                    gymDisplayAsync: gymDisplayAsync,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _BottomNav(
+                              current: _tab,
+                              onChanged: (index) {
+                                setState(() => _tab = index);
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    // Content
-                    Expanded(
-                      child: IndexedStack(
-                        index: _tab,
-                        children: const [
-                          _HomeTab(),
-                          _WorkoutTab(),
-                          _NutritionTab(),
-                          _ProgressTab(),
-                        ],
-                      ),
-                    ),
-                    // Bottom nav
-                    Container(
-                      color: const Color(0xFF0E0E0E),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _AppNavItem(icon: Icons.home_rounded, label: 'Home', idx: 0, current: _tab, onTap: (i) => setState(() => _tab = i)),
-                          _AppNavItem(icon: Icons.fitness_center_rounded, label: 'Workout', idx: 1, current: _tab, onTap: (i) => setState(() => _tab = i)),
-                          _AppNavItem(icon: Icons.restaurant_rounded, label: 'Nutrition', idx: 2, current: _tab, onTap: (i) => setState(() => _tab = i)),
-                          _AppNavItem(icon: Icons.bar_chart_rounded, label: 'Progress', idx: 3, current: _tab, onTap: (i) => setState(() => _tab = i)),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
-        ),
-      );
+              );
+            },
+          );
         },
       ),
     );
   }
 }
 
-class _AppNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int idx;
-  final int current;
-  final Function(int) onTap;
-
-  const _AppNavItem({
-    required this.icon, required this.label,
-    required this.idx, required this.current, required this.onTap,
-  });
+class _PhoneNotch extends StatelessWidget {
+  const _PhoneNotch();
 
   @override
   Widget build(BuildContext context) {
-    final active = idx == current;
-    return GestureDetector(
-      onTap: () => onTap(idx),
+    return Container(
+      height: 34,
+      color: const Color(0xFF050505),
+      child: Center(
+        child: Container(
+          width: 96,
+          height: 16,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  const _BottomNav({
+    required this.current,
+    required this.onChanged,
+  });
+
+  final int current;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFF0E0E0E),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _AppNavItem(
+            icon: Icons.home_rounded,
+            label: 'Home',
+            index: 0,
+            current: current,
+            onTap: onChanged,
+          ),
+          _AppNavItem(
+            icon: Icons.login_rounded,
+            label: 'Visits',
+            index: 1,
+            current: current,
+            onTap: onChanged,
+          ),
+          _AppNavItem(
+            icon: Icons.receipt_long_rounded,
+            label: 'Payments',
+            index: 2,
+            current: current,
+            onTap: onChanged,
+          ),
+          _AppNavItem(
+            icon: Icons.qr_code_rounded,
+            label: 'Access',
+            index: 3,
+            current: current,
+            onTap: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppNavItem extends StatelessWidget {
+  const _AppNavItem({
+    required this.icon,
+    required this.label,
+    required this.index,
+    required this.current,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final int index;
+  final int current;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = index == current;
+    return InkWell(
+      onTap: () => onTap(index),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: active ? gold : const Color(0xFF444444), size: 20),
           const SizedBox(height: 3),
-          ApexText(label, fontSize: 9,
-              color: active ? gold : const Color(0xFF444444)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Home Tab ────────────────────────────────────────────────────────────────
-class _HomeTab extends StatelessWidget {
-  const _HomeTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  ApexText('Good morning,', fontSize: 11),
-                  GoldHeading('Ahmed 👋', fontSize: 16),
-                ],
-              ),
-              const Spacer(),
-              Container(
-                width: 36, height: 36,
-                decoration: BoxDecoration(
-                  color: goldDark,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Center(
-                  child: ApexText('AK', fontSize: 12,
-                      color: Color(0xFFE8E8E8), fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Plan card
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1A1200), Color(0xFF0E0A00)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: gold.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    ApexText('Elite Plan', fontSize: 11, color: gold,
-                        fontWeight: FontWeight.w600),
-                    Spacer(),
-                    ApexText('22 days left', fontSize: 10,
-                        color: Color(0xFF888888)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const ApexProgressBar(value: 8, max: 30, color: gold, height: 4),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _PhoneStat(label: 'Sessions', value: '42'),
-                    _PhoneStat(label: 'Streak', value: '7 🔥'),
-                    _PhoneStat(label: 'Rank', value: '#4'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Occupancy
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cardDark,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderDark),
-            ),
-            child: Column(
-              children: [
-                const OccupancyRing(current: 23, capacity: 60, compact: true),
-                const SizedBox(height: 8),
-                const ApexText('Perfect time to visit!',
-                    fontSize: 11, color: greenSuccess,
-                    fontWeight: FontWeight.w600),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const GoldHeading('Today\'s Crowd', fontSize: 12),
-          const SizedBox(height: 8),
-          const HourlyChart(),
-          const SizedBox(height: 16),
-          // NFC check-in button
-          Container(
-            width: double.infinity,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [gold, goldDark]),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: gold.withOpacity(0.3),
-                  blurRadius: 16,
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.nfc_rounded, color: Colors.black, size: 20),
-                  SizedBox(width: 8),
-                  ApexText('NFC Check-in', fontSize: 14,
-                      color: Colors.black, fontWeight: FontWeight.w700),
-                ],
-              ),
-            ),
+          ApexText(
+            label,
+            fontSize: 9,
+            color: active ? gold : const Color(0xFF444444),
           ),
         ],
       ),
@@ -285,287 +268,881 @@ class _HomeTab extends StatelessWidget {
   }
 }
 
-class _PhoneStat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _PhoneStat({required this.label, required this.value});
+class _MemberHomeTab extends StatelessWidget {
+  const _MemberHomeTab({
+    required this.member,
+    required this.attendanceAsync,
+    required this.occupancyAsync,
+  });
+
+  final Member member;
+  final AsyncValue<List<AttendanceSession>> attendanceAsync;
+  final AsyncValue<OccupancySettings> occupancyAsync;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final subscription = EffectiveSubscriptionState.fromMember(member);
+
+    return _PhoneScroll(
       children: [
-        ApexText(value, fontSize: 14, color: const Color(0xFFE8E8E8),
-            fontWeight: FontWeight.w700),
-        const SizedBox(height: 2),
-        ApexText(label, fontSize: 9, color: const Color(0xFF888888)),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ApexText('Welcome back,', fontSize: 11),
+                  GoldHeading(member.fullName, fontSize: 16),
+                  const SizedBox(height: 6),
+                  ApexText(
+                    _emptyDash(member.phone),
+                    fontSize: 11,
+                    color: const Color(0xFF777777),
+                  ),
+                  if ((member.email ?? '').trim().isNotEmpty)
+                    ApexText(
+                      member.email!.trim(),
+                      fontSize: 11,
+                      color: const Color(0xFF777777),
+                    ),
+                ],
+              ),
+            ),
+            _InitialsBadge(member.av.isEmpty ? _initials(member.fullName) : member.av),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _InfoCard(
+          title: 'Profile',
+          children: [
+            _InfoLine('Member Status', member.status),
+            _InfoLine('Account Status', member.accountStatus ?? 'active'),
+            _InfoLine('Access Status', member.accessStatus ?? 'active'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _SubscriptionCard(member: member, subscription: subscription),
+        const SizedBox(height: 12),
+        _AttendanceStatusSummary(async: attendanceAsync),
+        const SizedBox(height: 12),
+        _LiveOccupancyCard(async: occupancyAsync),
       ],
     );
   }
 }
 
-// ── Workout Tab ─────────────────────────────────────────────────────────────
-class _WorkoutTab extends StatelessWidget {
-  const _WorkoutTab();
+class _LiveOccupancyCard extends StatelessWidget {
+  const _LiveOccupancyCard({required this.async});
 
-  static const _exercises = [
-    {'name': 'Bench Press', 'sets': '4×8', 'done': true},
-    {'name': 'Squat', 'sets': '4×6', 'done': true},
-    {'name': 'Deadlift', 'sets': '3×5', 'done': false},
-    {'name': 'Overhead Press', 'sets': '3×8', 'done': false},
-    {'name': 'Pull-ups', 'sets': '3×10', 'done': false},
-  ];
+  final AsyncValue<OccupancySettings> async;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: greenSuccess.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: greenSuccess.withOpacity(0.2)),
-            ),
-            child: const Row(
+    return _InfoCard(
+      title: 'Live Occupancy',
+      children: [
+        async.when(
+          loading: () => const ApexText('Loading occupancy...', fontSize: 12),
+          error: (error, _) => ApexText(
+            _friendlyFirestoreError(error),
+            fontSize: 12,
+            color: orangeWarning,
+          ),
+          data: (settings) {
+            final count = settings.count < 0 ? 0 : settings.count;
+            final capacity = settings.capacity > 0
+                ? settings.capacity
+                : settings.maxCapacity;
+            final hasCapacity = capacity > 0;
+            final percent = hasCapacity
+                ? (count / capacity * 100).clamp(0, 100).round()
+                : null;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.play_circle_rounded, color: greenSuccess, size: 20),
-                SizedBox(width: 8),
-                ApexText('Session Active · 00:42:18',
-                    fontSize: 12, color: greenSuccess, fontWeight: FontWeight.w600),
+                _InfoLine(
+                  'Current',
+                  hasCapacity ? '$count / $capacity' : '$count inside',
+                ),
+                _InfoLine('Status', _occupancyStatus(percent)),
+                if (percent != null) _InfoLine('Usage', '$percent%'),
               ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const GoldHeading('Push Day A', fontSize: 14),
-          const SizedBox(height: 12),
-          ..._exercises.map((ex) => _ExerciseRow(
-            name: ex['name'] as String,
-            sets: ex['sets'] as String,
-            done: ex['done'] as bool,
-          )),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExerciseRow extends StatelessWidget {
-  final String name;
-  final String sets;
-  final bool done;
-  const _ExerciseRow({required this.name, required this.sets, required this.done});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: done ? greenSuccess.withOpacity(0.06) : cardDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: done ? greenSuccess.withOpacity(0.2) : borderDark,
+            );
+          },
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-              color: done ? greenSuccess : const Color(0xFF333333), size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ApexText(name, fontSize: 13,
-                color: done ? const Color(0xFF888888) : const Color(0xFFCCCCCC),
-                fontWeight: done ? FontWeight.w400 : FontWeight.w500),
-          ),
-          ApexText(sets, fontSize: 11, color: gold),
-        ],
-      ),
+      ],
     );
   }
 }
 
-// ── Nutrition Tab ────────────────────────────────────────────────────────────
-class _NutritionTab extends StatelessWidget {
-  const _NutritionTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const GoldHeading('Today\'s Nutrition', fontSize: 14),
-          const SizedBox(height: 16),
-          _MacroCard(label: 'Calories', actual: 2650, target: 2800,
-              unit: 'kcal', color: gold),
-          const SizedBox(height: 10),
-          _MacroCard(label: 'Protein', actual: 162, target: 180,
-              unit: 'g', color: blueInfo),
-          const SizedBox(height: 10),
-          _MacroCard(label: 'Carbs', actual: 310, target: 350,
-              unit: 'g', color: orangeWarning),
-          const SizedBox(height: 20),
-          const GoldHeading('Meals', fontSize: 12),
-          const SizedBox(height: 10),
-          ...[ 
-            {'name': 'Breakfast — Eggs & Oats', 'kcal': '620 kcal', 'done': true},
-            {'name': 'Pre-Workout Shake', 'kcal': '280 kcal', 'done': true},
-            {'name': 'Lunch — Chicken & Rice', 'kcal': '850 kcal', 'done': true},
-            {'name': 'Post-Workout Meal', 'kcal': '700 kcal', 'done': false},
-            {'name': 'Dinner', 'kcal': '350 kcal', 'done': false},
-          ].map((m) => _MealRow(
-            name: m['name'] as String,
-            kcal: m['kcal'] as String,
-            done: m['done'] as bool,
-          )),
-        ],
-      ),
-    );
-  }
-}
-
-class _MacroCard extends StatelessWidget {
-  final String label;
-  final double actual;
-  final double target;
-  final String unit;
-  final Color color;
-
-  const _MacroCard({
-    required this.label, required this.actual, required this.target,
-    required this.unit, required this.color,
+class _SubscriptionCard extends StatelessWidget {
+  const _SubscriptionCard({
+    required this.member,
+    required this.subscription,
   });
 
+  final Member member;
+  final EffectiveSubscriptionState subscription;
+
   @override
   Widget build(BuildContext context) {
-    final pct = (actual / target * 100).round();
+    final hasSummary = (member.currentPlanName ?? '').trim().isNotEmpty ||
+        (member.subscriptionStatus ?? '').trim().isNotEmpty ||
+        member.subscriptionEndDate != null ||
+        (member.paymentStatus ?? '').trim().isNotEmpty;
+
+    return _InfoCard(
+      title: 'Current Subscription',
+      trailing: ApexBadge(text: subscription.label, color: subscription.color),
+      children: hasSummary
+          ? [
+              _InfoLine('Plan', member.currentPlanName ?? member.plan),
+              _InfoLine('Subscription', member.subscriptionStatus ?? 'active'),
+              _InfoLine('Ends', _formatDate(member.subscriptionEndDate)),
+              _InfoLine('Payment', member.paymentStatus ?? 'paid'),
+            ]
+          : const [
+              ApexText(
+                'No active subscription found.',
+                fontSize: 12,
+                color: Color(0xFF777777),
+              ),
+            ],
+    );
+  }
+}
+
+class _AttendanceStatusSummary extends StatelessWidget {
+  const _AttendanceStatusSummary({required this.async});
+
+  final AsyncValue<List<AttendanceSession>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoCard(
+      title: 'Attendance',
+      children: [
+        async.when(
+          loading: () => const ApexText('Loading attendance...', fontSize: 12),
+          error: (error, _) => ApexText(
+            _friendlyFirestoreError(error),
+            fontSize: 12,
+            color: orangeWarning,
+          ),
+          data: (sessions) {
+            final active = _activeSession(sessions);
+            if (active != null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ApexText(
+                    'Currently inside',
+                    color: greenSuccess,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  const SizedBox(height: 8),
+                  _InfoLine('Checked in', _formatDateTime(active.checkInAt)),
+                  _InfoLine('Duration', _durationLabel(active)),
+                ],
+              );
+            }
+
+            final last = _lastCompletedSession(sessions);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ApexText(
+                  'Not currently inside',
+                  color: Color(0xFF888888),
+                  fontWeight: FontWeight.w700,
+                ),
+                const SizedBox(height: 8),
+                _InfoLine(
+                  'Latest checkout',
+                  last?.checkOutAt == null
+                      ? 'No completed visits'
+                      : _formatDateTime(last!.checkOutAt),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _AttendanceTab extends StatelessWidget {
+  const _AttendanceTab({required this.async});
+
+  final AsyncValue<List<AttendanceSession>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PhoneScroll(
+      children: [
+        const GoldHeading('Attendance History', fontSize: 16),
+        const SizedBox(height: 12),
+        async.when(
+          loading: () => const _InlineLoading(),
+          error: (error, _) => _InlineError(_friendlyFirestoreError(error)),
+          data: (sessions) {
+            final rows = sessions.take(10).toList();
+            if (rows.isEmpty) {
+              return const _EmptyState('No visits yet.');
+            }
+            return Column(
+              children:
+                  rows.map((session) => _AttendanceRow(session: session)).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _AttendanceRow extends StatelessWidget {
+  const _AttendanceRow({required this.session});
+
+  final AttendanceSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return _MiniCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ApexBadge(
+                text: session.status,
+                color: _sessionStatusColor(session.status),
+              ),
+              const Spacer(),
+              ApexText(
+                _durationLabel(session),
+                fontSize: 11,
+                color: gold,
+                fontWeight: FontWeight.w700,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _InfoLine('Date', _formatDate(session.checkInAt)),
+          _InfoLine('Check-in', _timeOnly(session.checkInAt)),
+          _InfoLine(
+            'Check-out',
+            session.checkOutAt == null ? 'Still inside' : _timeOnly(session.checkOutAt),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentsTab extends StatelessWidget {
+  const _PaymentsTab({required this.async});
+
+  final AsyncValue<List<GymTransaction>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PhoneScroll(
+      children: [
+        const GoldHeading('Receipts', fontSize: 16),
+        const SizedBox(height: 12),
+        async.when(
+          loading: () => const _InlineLoading(),
+          error: (error, _) => _InlineError(_friendlyFirestoreError(error)),
+          data: (transactions) {
+            final rows = transactions.take(10).toList();
+            if (rows.isEmpty) {
+              return const _EmptyState('No payments yet.');
+            }
+            return Column(
+              children: rows.map((tx) => _PaymentRow(tx: tx)).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PaymentRow extends StatelessWidget {
+  const _PaymentRow({required this.tx});
+
+  final GymTransaction tx;
+
+  @override
+  Widget build(BuildContext context) {
+    return _MiniCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ApexText(
+                  tx.receiptNumber,
+                  color: const Color(0xFFE0E0E0),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ApexBadge(text: tx.paymentStatus, color: _paymentColor(tx.paymentStatus)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _InfoLine('Amount', '${tx.amount.toStringAsFixed(0)} ${tx.currency}'),
+          _InfoLine('Method', tx.paymentMethod),
+          _InfoLine('Date', _formatDateTime(tx.createdAt)),
+          if ((tx.notes ?? '').trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: ApexText(
+                tx.notes!.trim(),
+                fontSize: 11,
+                color: const Color(0xFF999999),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccessTab extends StatelessWidget {
+  const _AccessTab({
+    required this.member,
+    required this.gymDisplayAsync,
+  });
+
+  final Member member;
+  final AsyncValue<_MemberGymDisplay> gymDisplayAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    final qrPayload = _qrPayloadFor(member);
+    final eligibility = evaluateMemberAccessEligibility(member);
+    final gymName = gymDisplayAsync.valueOrNull?.name.trim().isNotEmpty == true
+        ? gymDisplayAsync.valueOrNull!.name
+        : 'Your Gym';
+    final subscription = eligibility.subscriptionState;
+
+    return _PhoneScroll(
+      children: [
+        const GoldHeading('Digital Membership Card', fontSize: 16),
+        const SizedBox(height: 12),
+        _DigitalCard(
+          gymName: gymName,
+          member: member,
+          eligibility: eligibility,
+          qrPayload: qrPayload,
+        ),
+        const SizedBox(height: 12),
+        _InfoCard(
+          title: 'Card Details',
+          trailing: ApexBadge(
+            text: eligibility.allowed ? 'Access Allowed' : 'Access Blocked',
+            color: eligibility.allowed ? greenSuccess : redAlert,
+          ),
+          children: [
+            _InfoLine('Plan', member.currentPlanName ?? member.plan),
+            _InfoLine('Subscription', subscription.label),
+            _InfoLine('Ends', _formatDate(member.subscriptionEndDate)),
+            _InfoLine('Payment', member.paymentStatus ?? 'unknown'),
+            _InfoLine('Access Status', member.accessStatus ?? 'active'),
+            if (eligibility.reasons.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              ...eligibility.reasons.map(
+                (reason) => ApexText(
+                  _cardReasonLabel(reason),
+                  fontSize: 11,
+                  color: eligibility.allowed ? orangeWarning : redAlert,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DigitalCard extends StatelessWidget {
+  const _DigitalCard({
+    required this.gymName,
+    required this.member,
+    required this.eligibility,
+    required this.qrPayload,
+  });
+
+  final String gymName;
+  final Member member;
+  final MemberAccessEligibility eligibility;
+  final String? qrPayload;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = eligibility.allowed ? greenSuccess : redAlert;
+
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          ApexText(
+            gymName,
+            color: gold,
+            fontWeight: FontWeight.w700,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          GoldHeading(member.fullName, fontSize: 18),
+          const SizedBox(height: 4),
+          ApexText(
+            [
+              if ((member.phone ?? '').trim().isNotEmpty) member.phone!.trim(),
+              if ((member.email ?? '').trim().isNotEmpty) member.email!.trim(),
+            ].join(' • '),
+            fontSize: 11,
+            color: const Color(0xFF888888),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          ApexBadge(
+            text: eligibility.allowed ? 'Access Allowed' : 'Access Blocked',
+            color: statusColor,
+          ),
+          if (eligibility.severity == MemberAccessSeverity.warning) ...[
+            const SizedBox(height: 8),
+            ApexText(
+              _cardReasonLabel(eligibility.message),
+              color: orangeWarning,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (qrPayload == null)
+            const _NoQrMessage()
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: QrImageView(
+                data: qrPayload!,
+                version: QrVersions.auto,
+                size: 190,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            ApexText(
+              _maskedAccessValue(qrPayload!),
+              fontSize: 12,
+              color: const Color(0xFFCCCCCC),
+              fontWeight: FontWeight.w700,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NoQrMessage extends StatelessWidget {
+  const _NoQrMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderDark),
+      ),
+      child: const ApexText(
+        'No access credential assigned yet. Please contact the gym.',
+        fontSize: 12,
+        color: orangeWarning,
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+}
+
+class _PhoneScroll extends StatelessWidget {
+  const _PhoneScroll({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({
+    required this.title,
+    required this.children,
+    this.trailing,
+  });
+
+  final String title;
+  final List<Widget> children;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: GoldHeading(title, fontSize: 13)),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniCard extends StatelessWidget {
+  const _MiniCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cardDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderDark),
       ),
-      child: Column(
+      child: child,
+    );
+  }
+}
+
+class _InfoLine extends StatelessWidget {
+  const _InfoLine(this.label, this.value);
+
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              ApexText(label, fontSize: 12, color: const Color(0xFF888888)),
-              const Spacer(),
-              ApexText('${actual.round()} / ${target.round()} $unit',
-                  fontSize: 10, color: const Color(0xFF555555)),
-              const SizedBox(width: 6),
-              ApexText('$pct%', fontSize: 11, color: color,
-                  fontWeight: FontWeight.w700),
-            ],
+          Expanded(
+            child: ApexText(
+              label,
+              fontSize: 11,
+              color: const Color(0xFF777777),
+            ),
           ),
-          const SizedBox(height: 8),
-          ApexProgressBar(value: actual, max: target, color: color, height: 5),
+          const SizedBox(width: 10),
+          Flexible(
+            child: ApexText(
+              _emptyDash(value),
+              fontSize: 11,
+              color: const Color(0xFFD0D0D0),
+              textAlign: TextAlign.right,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _MealRow extends StatelessWidget {
-  final String name;
-  final String kcal;
-  final bool done;
-  const _MealRow({required this.name, required this.kcal, required this.done});
+class _InitialsBadge extends StatelessWidget {
+  const _InitialsBadge(this.initials);
+
+  final String initials;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(
-        color: done ? greenSuccess.withOpacity(0.05) : cardDark,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: done ? greenSuccess.withOpacity(0.15) : borderDark,
-        ),
+        color: goldDark,
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        children: [
-          Icon(done ? Icons.check_circle_rounded : Icons.circle_outlined,
-              color: done ? greenSuccess : const Color(0xFF333333), size: 16),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ApexText(name, fontSize: 12,
-                color: done ? const Color(0xFF666666) : const Color(0xFFBBBBBB)),
-          ),
-          ApexText(kcal, fontSize: 10, color: const Color(0xFF555555)),
-        ],
+      child: Center(
+        child: ApexText(
+          initials,
+          color: const Color(0xFFE8E8E8),
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 }
 
-// ── Progress Tab ─────────────────────────────────────────────────────────────
-class _ProgressTab extends StatelessWidget {
-  const _ProgressTab();
+class _InlineLoading extends StatelessWidget {
+  const _InlineLoading();
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const GoldHeading('Strength Progress', fontSize: 14),
-          const SizedBox(height: 16),
-          LineChartWidget(
-            xLabels: const ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'],
-            series: const [
-              LineChartSeries(
-                label: 'Bench', color: gold,
-                values: [80, 82.5, 85, 85, 87.5, 90],
-              ),
-              LineChartSeries(
-                label: 'Squat', color: blueInfo,
-                values: [100, 105, 107.5, 110, 110, 112.5],
-              ),
-              LineChartSeries(
-                label: 'Deadlift', color: greenSuccess,
-                values: [120, 125, 130, 132.5, 135, 140],
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: cardDark,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: gold.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Row(
-                  children: [
-                    Icon(Icons.auto_awesome_rounded, color: gold, size: 14),
-                    SizedBox(width: 6),
-                    ApexText('AI Recommendation', fontSize: 11,
-                        color: gold, fontWeight: FontWeight.w600),
-                  ],
-                ),
-                SizedBox(height: 10),
-                ApexText(
-                  'Excellent progress! Your bench press has improved +12.5% over 6 weeks. Consider adding a deload week to prevent overtraining. Focus on leg volume — your squat is progressing but lagging behind your upper body.',
-                  fontSize: 11,
-                  color: Color(0xFF888888),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: CircularProgressIndicator(color: gold),
       ),
     );
   }
+}
+
+class _InlineError extends StatelessWidget {
+  const _InlineError(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return _EmptyState(message, color: orangeWarning);
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState(this.message, {this.color = const Color(0xFF777777)});
+
+  final String message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexText(message, color: color, textAlign: TextAlign.center);
+  }
+}
+
+class _FullScreenMessage extends StatelessWidget {
+  const _FullScreenMessage(
+    this.message, {
+    this.color = const Color(0xFF888888),
+  });
+
+  final String message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ApexText(message, color: color, textAlign: TextAlign.center),
+      ),
+    );
+  }
+}
+
+AttendanceSession? _activeSession(List<AttendanceSession> sessions) {
+  for (final session in sessions) {
+    if (session.status.trim().toLowerCase() == AttendanceSessionStatus.active) {
+      return session;
+    }
+  }
+  return null;
+}
+
+AttendanceSession? _lastCompletedSession(List<AttendanceSession> sessions) {
+  final completed = sessions
+      .where((session) =>
+          session.status.trim().toLowerCase() ==
+              AttendanceSessionStatus.completed &&
+          session.checkOutAt != null)
+      .toList();
+  if (completed.isEmpty) return null;
+  completed.sort((a, b) => b.checkOutAt!.compareTo(a.checkOutAt!));
+  return completed.first;
+}
+
+String _durationLabel(AttendanceSession session) {
+  final end = session.checkOutAt ??
+      (session.status.trim().toLowerCase() == AttendanceSessionStatus.active
+          ? DateTime.now()
+          : null);
+  final minutes = session.checkOutAt != null
+      ? session.durationMinutes ?? end?.difference(session.checkInAt).inMinutes
+      : end?.difference(session.checkInAt).inMinutes;
+  if (minutes == null) return 'Unknown';
+  final safe = minutes.clamp(0, 1 << 30);
+  if (safe < 60) return '${safe}m';
+  return '${safe ~/ 60}h ${safe % 60}m';
+}
+
+String _formatDate(DateTime? date) {
+  if (date == null) return 'Unknown';
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+String _formatDateTime(DateTime? date) {
+  if (date == null) return 'Unknown';
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '${_formatDate(date)} $hour:$minute';
+}
+
+String _timeOnly(DateTime? date) {
+  if (date == null) return 'Unknown';
+  return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+}
+
+String _emptyDash(String? value) {
+  final trimmed = value?.trim() ?? '';
+  return trimmed.isEmpty ? '-' : trimmed;
+}
+
+String _initials(String value) {
+  final parts = value
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '';
+  final first = parts.first[0];
+  final second = parts.length > 1 ? parts[1][0] : '';
+  return '$first$second'.toUpperCase();
+}
+
+Color _sessionStatusColor(String status) {
+  switch (status.trim().toLowerCase()) {
+    case AttendanceSessionStatus.active:
+      return greenSuccess;
+    case AttendanceSessionStatus.completed:
+      return blueInfo;
+    case AttendanceSessionStatus.cancelled:
+      return orangeWarning;
+    default:
+      return const Color(0xFF666666);
+  }
+}
+
+Color _paymentColor(String status) {
+  switch (status.trim().toLowerCase()) {
+    case TransactionPaymentStatus.paid:
+      return greenSuccess;
+    case TransactionPaymentStatus.partial:
+      return orangeWarning;
+    case TransactionPaymentStatus.unpaid:
+      return redAlert;
+    default:
+      return const Color(0xFF666666);
+  }
+}
+
+String? _qrPayloadFor(Member member) {
+  final qrCode = member.qrCode?.trim();
+  if (qrCode != null && qrCode.isNotEmpty) return qrCode;
+
+  final accessCode = member.accessCode?.trim();
+  if (accessCode != null && accessCode.isNotEmpty) return accessCode;
+
+  final nfcTagId = member.nfcTagId?.trim();
+  if (nfcTagId != null && nfcTagId.isNotEmpty) return nfcTagId;
+
+  return null;
+}
+
+String _maskedAccessValue(String value) {
+  final trimmed = value.trim();
+  if (trimmed.length <= 4) return trimmed;
+  if (trimmed.length <= 8) {
+    return '${trimmed.substring(0, 2)}••${trimmed.substring(trimmed.length - 2)}';
+  }
+  return '${trimmed.substring(0, 4)}••••${trimmed.substring(trimmed.length - 4)}';
+}
+
+String _occupancyStatus(int? percent) {
+  if (percent == null) return 'Count only';
+  if (percent >= 90) return 'Full';
+  if (percent >= 75) return 'Busy';
+  if (percent >= 50) return 'Moderate';
+  return 'Quiet';
+}
+
+String _cardReasonLabel(String reason) {
+  switch (reason) {
+    case 'Member profile is inactive.':
+      return 'Member inactive';
+    case 'Member account is inactive.':
+      return 'Member account inactive';
+    case 'Access credential is disabled.':
+      return 'Access disabled';
+    case 'Access credential was reported lost.':
+      return 'Access lost';
+    case 'Access credential was replaced.':
+      return 'Access replaced';
+    case 'Subscription expired.':
+      return 'Subscription expired';
+    case 'Subscription is unpaid.':
+      return 'Subscription unpaid';
+    case 'No active subscription found.':
+      return 'No active subscription';
+    case 'Subscription is expiring soon.':
+      return 'Subscription expiring soon';
+    case 'Subscription has a partial payment.':
+      return 'Partial payment';
+    default:
+      return reason;
+  }
+}
+
+String _friendlyFirestoreError(Object error) {
+  if (error is FirebaseException) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'This data is not available for your account.';
+      case 'failed-precondition':
+        return 'This data needs a Firestore index before it can load.';
+      case 'unavailable':
+        return 'Firestore is unavailable right now. Please try again.';
+      default:
+        return error.message ?? 'Could not load this data.';
+    }
+  }
+  return 'Could not load this data.';
 }

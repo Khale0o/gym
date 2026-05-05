@@ -14,12 +14,12 @@ class GymPlan {
   });
 
   factory GymPlan.fromFirestore(DocumentSnapshot doc) {
-    final m = doc.data() as Map<String, dynamic>;
+    final m = doc.data() as Map<String, dynamic>? ?? <String, dynamic>{};
     return GymPlan(
       id: doc.id,
-      name: m['name'] ?? '',
-      price: (m['price'] ?? 0).toDouble(),
-      membersCount: (m['membersCount'] ?? 0) as int,
+      name: (m['name'] as String?) ?? '',
+      price: ((m['price'] as num?) ?? 0).toDouble(),
+      membersCount: ((m['membersCount'] as num?) ?? 0).toInt(),
     );
   }
 

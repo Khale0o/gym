@@ -58,6 +58,11 @@ service cloud.firestore {
       return isOwner() || isAdmin() || isReception();
     }
 
+    function canInviteStaffRole(role) {
+      return (isOwner() && role in ['admin', 'reception', 'coach']) ||
+        (isAdmin() && role in ['reception', 'coach']);
+    }
+
     function isStaffRole() {
       return isOwner() || isAdmin() || isReception() || isCoach();
     }
@@ -216,13 +221,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (
-        request.auth.uid == uid ||
-        (
-          isOwnerOrAdmin() &&
-          resource.data.defaultGymId == userGymId()
-        )
-      );
+      allow read: if signedIn() && request.auth.uid == uid;
 
       allow create: if isSafeInviteUserCreate(uid);
       allow update, delete: if false;
@@ -302,10 +301,23 @@ service cloud.firestore {
           isGymUser(gymId) && isOwnerOrAdmin()
         ) || isPendingInviteForAuthEmail();
 
-        allow create: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          canInviteStaffRole(request.resource.data.role) &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.emailNormalized is string &&
+          request.resource.data.emailNormalized != '';
 
         allow update: if (
-          isGymUser(gymId) && isOwnerOrAdmin()
+          isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          canInviteStaffRole(resource.data.role) &&
+          request.resource.data.status == 'cancelled' &&
+          hasOnlyAffected(['status', 'updatedAt']) &&
+          unchanged('gymId') &&
+          unchanged('role') &&
+          unchanged('emailNormalized')
         ) || isSafeInviteClaimUpdate();
 
         allow delete: if false;
@@ -316,10 +328,26 @@ service cloud.firestore {
           isGymUser(gymId) && isOwnerAdminReception()
         ) || isPendingInviteForAuthEmail();
 
-        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+        allow create: if isGymUser(gymId) &&
+          isOwnerAdminReception() &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.role == 'member' &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.memberId is string &&
+          request.resource.data.memberId != '' &&
+          request.resource.data.emailNormalized is string &&
+          request.resource.data.emailNormalized != '';
 
         allow update: if (
-          isGymUser(gymId) && isOwnerAdminReception()
+          isGymUser(gymId) &&
+          isOwnerAdminReception() &&
+          resource.data.role == 'member' &&
+          request.resource.data.status == 'cancelled' &&
+          hasOnlyAffected(['status', 'updatedAt']) &&
+          unchanged('gymId') &&
+          unchanged('role') &&
+          unchanged('memberId') &&
+          unchanged('emailNormalized')
         ) || isSafeInviteClaimUpdate();
 
         allow delete: if false;
@@ -358,6 +386,169 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /expenses/{expenseId} {
+        allow read: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.title is string &&
+          request.resource.data.title != '' &&
+          request.resource.data.amount is number &&
+          request.resource.data.amount > 0 &&
+          request.resource.data.currency is string &&
+          request.resource.data.currency != '' &&
+          request.resource.data.category in [
+            'rent',
+            'salaries',
+            'equipment',
+            'maintenance',
+            'utilities',
+            'marketing',
+            'supplies',
+            'supplements_stock',
+            'other'
+          ] &&
+          request.resource.data.paymentMethod is string &&
+          request.resource.data.paymentMethod != '' &&
+          request.resource.data.date is timestamp &&
+          request.resource.data.status in ['paid', 'pending'];
+        allow update: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == resource.data.gymId &&
+          (
+            request.resource.data.status in ['paid', 'pending'] ||
+            (
+              request.resource.data.status == 'cancelled' &&
+              resource.data.status != 'cancelled' &&
+              hasOnlyAffected([
+                'status',
+                'cancelledAt',
+                'cancelledBy',
+                'cancellationReason',
+                'updatedAt'
+              ])
+            )
+          );
+        allow delete: if false;
+      }
+
+      match /products/{productId} {
+        allow read: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.name is string &&
+          request.resource.data.name != '' &&
+          request.resource.data.category in [
+            'supplement',
+            'drink',
+            'equipment',
+            'clothing',
+            'other'
+          ] &&
+          request.resource.data.sellingPrice is number &&
+          request.resource.data.sellingPrice > 0 &&
+          request.resource.data.costPrice is number &&
+          request.resource.data.costPrice >= 0 &&
+          request.resource.data.currency is string &&
+          request.resource.data.currency != '' &&
+          request.resource.data.status in ['active', 'inactive', 'discontinued'] &&
+          (!('stockQuantity' in request.resource.data) ||
+            (
+              request.resource.data.stockQuantity is number &&
+              request.resource.data.stockQuantity >= 0
+            ));
+        allow update: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == resource.data.gymId &&
+          (!('stockQuantity' in request.resource.data) ||
+            (
+              request.resource.data.stockQuantity is number &&
+              request.resource.data.stockQuantity >= 0
+            ));
+        allow delete: if false;
+      }
+
+      match /productSales/{saleId} {
+        allow read: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.productId is string &&
+          request.resource.data.productId != '' &&
+          request.resource.data.quantity is number &&
+          request.resource.data.quantity > 0 &&
+          request.resource.data.unitSellingPrice is number &&
+          request.resource.data.unitSellingPrice > 0 &&
+          request.resource.data.unitCostPrice is number &&
+          request.resource.data.unitCostPrice >= 0 &&
+          request.resource.data.totalRevenue is number &&
+          request.resource.data.totalRevenue > 0 &&
+          request.resource.data.totalCost is number &&
+          request.resource.data.totalCost >= 0 &&
+          request.resource.data.grossProfit is number &&
+          request.resource.data.currency is string &&
+          request.resource.data.currency != '' &&
+          request.resource.data.paymentMethod is string &&
+          request.resource.data.paymentMethod != '' &&
+          request.resource.data.saleDate is timestamp &&
+          request.resource.data.status in ['paid', 'pending'];
+        allow update: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == resource.data.gymId &&
+          (
+            request.resource.data.status in ['paid', 'pending'] ||
+            (
+              request.resource.data.status == 'cancelled' &&
+              resource.data.status != 'cancelled' &&
+              hasOnlyAffected([
+                'status',
+                'cancelledAt',
+                'cancelledBy',
+                'cancellationReason',
+                'updatedAt'
+              ])
+            )
+          );
+        allow delete: if false;
+      }
+
+      match /staffPayroll/{payrollId} {
+        allow read: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == gymId &&
+          request.resource.data.staffId is string &&
+          request.resource.data.staffId != '' &&
+          request.resource.data.salaryAmount is number &&
+          request.resource.data.salaryAmount > 0 &&
+          request.resource.data.currency is string &&
+          request.resource.data.currency != '' &&
+          request.resource.data.periodMonth is timestamp &&
+          request.resource.data.paymentDate is timestamp &&
+          request.resource.data.paymentMethod is string &&
+          request.resource.data.paymentMethod != '' &&
+          request.resource.data.status in ['paid', 'pending'];
+        allow update: if isGymUser(gymId) &&
+          isOwnerOrAdmin() &&
+          request.resource.data.gymId == resource.data.gymId &&
+          (
+            request.resource.data.status in ['paid', 'pending'] ||
+            (
+              request.resource.data.status == 'cancelled' &&
+              resource.data.status != 'cancelled' &&
+              hasOnlyAffected([
+                'status',
+                'cancelledAt',
+                'cancelledBy',
+                'cancellationReason',
+                'updatedAt'
+              ])
+            )
+          );
+        allow delete: if false;
+      }
+
       match /checkins/{checkinId} {
         allow read: if isGymUser(gymId) && (
           isStaffRole() ||
@@ -371,13 +562,34 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      match /attendanceSessions/{sessionId} {
+        allow read: if isGymUser(gymId) && (
+          isStaffRole() ||
+          (
+            isMember() &&
+            resource.data.memberId == userProfile().linkedMemberId
+          )
+        );
+
+        allow create: if isGymUser(gymId) && isOwnerAdminReception();
+        allow update: if isGymUser(gymId) && isOwnerAdminReception();
+        allow delete: if false;
+      }
+
       match /settings/occupancy {
         allow read: if isGymUser(gymId);
         allow update: if isGymUser(gymId) && (
           (
             isOwnerOrAdmin() &&
             request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['count', 'capacity', 'updatedAt'])
+              .hasOnly([
+                'count',
+                'capacity',
+                'maxCapacity',
+                'gymCapacity',
+                'updatedAt',
+                'updatedBy'
+              ])
           ) ||
           (
             isReception() &&
@@ -385,13 +597,42 @@ service cloud.firestore {
               .hasOnly(['count', 'updatedAt'])
           )
         );
-        allow create: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow create: if isGymUser(gymId) && (
+          (
+            isOwnerOrAdmin() &&
+            request.resource.data.keys().hasOnly([
+              'count',
+              'capacity',
+              'maxCapacity',
+              'gymCapacity',
+              'createdAt',
+              'updatedAt',
+              'updatedBy'
+            ])
+          ) ||
+          (
+            isReception() &&
+            request.resource.data.keys().hasOnly(['count', 'createdAt', 'updatedAt'])
+          )
+        );
         allow delete: if false;
       }
 
       match /settings/app {
         allow read: if isGymUser(gymId);
         allow create, update: if isGymUser(gymId) && isOwnerOrAdmin();
+        allow delete: if false;
+      }
+
+      match /settings/receiptCounter {
+        allow read: if isGymUser(gymId) && isOwnerAdminReception();
+        allow create: if isGymUser(gymId) &&
+          isOwnerAdminReception() &&
+          request.resource.data.keys().hasOnly(['lastNumber', 'updatedAt']);
+        allow update: if isGymUser(gymId) &&
+          isOwnerAdminReception() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastNumber', 'updatedAt']);
         allow delete: if false;
       }
 

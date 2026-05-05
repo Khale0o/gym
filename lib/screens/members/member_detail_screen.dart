@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
 import 'package:gymsaas/models/checkin.dart';
 import 'package:gymsaas/models/member_access_eligibility.dart';
@@ -32,7 +34,9 @@ class MemberDetailScreen extends ConsumerWidget {
       backgroundColor: bgDark,
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator(color: gold)),
-        error: (e, _) => Center(child: ApexText('Error: $e', color: redAlert)),
+        error: (e, _) => Center(
+          child: ApexText(friendlyFirestoreErrorMessage(e), color: redAlert),
+        ),
         data: (member) {
           if (member == null) {
             return Center(
@@ -62,9 +66,20 @@ class _DetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subscriptionsAsync = ref.watch(memberSubscriptionsProvider(member.id));
-    final transactionsAsync = ref.watch(memberTransactionsProvider(member.id));
+    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final role = profile?.role ?? '';
+    final canReadBillingHistory =
+        RoleCapabilities.canProcessPayments(role) ||
+            RoleCapabilities.canViewFinance(role);
+    final subscriptionsAsync = canReadBillingHistory
+        ? ref.watch(memberSubscriptionsProvider(member.id))
+        : const AsyncValue<List<GymSubscription>>.data(<GymSubscription>[]);
+    final transactionsAsync = canReadBillingHistory
+        ? ref.watch(memberTransactionsProvider(member.id))
+        : const AsyncValue<List<GymTransaction>>.data(<GymTransaction>[]);
     final checkinsAsync = ref.watch(memberCheckinsProvider(member.id));
+    final attendanceSessionsAsync =
+        ref.watch(memberAttendanceSessionsProvider(member.id));
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -99,6 +114,8 @@ class _DetailBody extends ConsumerWidget {
                   subscriptionsAsync: subscriptionsAsync,
                   transactionsAsync: transactionsAsync,
                   checkinsAsync: checkinsAsync,
+                  attendanceSessionsAsync: attendanceSessionsAsync,
+                  canReadBillingHistory: canReadBillingHistory,
                 ),
               ] else ...[
                 // ترتيب جانبي للكمبيوتر
@@ -113,6 +130,8 @@ class _DetailBody extends ConsumerWidget {
                         subscriptionsAsync: subscriptionsAsync,
                         transactionsAsync: transactionsAsync,
                         checkinsAsync: checkinsAsync,
+                        attendanceSessionsAsync: attendanceSessionsAsync,
+                        canReadBillingHistory: canReadBillingHistory,
                       ),
                     ),
                   ],
@@ -485,12 +504,16 @@ class _RightColumn extends StatelessWidget {
   final AsyncValue<List<GymSubscription>> subscriptionsAsync;
   final AsyncValue<List<GymTransaction>> transactionsAsync;
   final AsyncValue<List<CheckIn>> checkinsAsync;
+  final AsyncValue<List<AttendanceSession>> attendanceSessionsAsync;
+  final bool canReadBillingHistory;
 
   const _RightColumn({
     required this.member,
     required this.subscriptionsAsync,
     required this.transactionsAsync,
     required this.checkinsAsync,
+    required this.attendanceSessionsAsync,
+    required this.canReadBillingHistory,
   });
 
   @override
@@ -504,9 +527,15 @@ class _RightColumn extends StatelessWidget {
           subscriptionsAsync: subscriptionsAsync,
         ),
         const SizedBox(height: 12),
-        _PaymentsHistoryCard(async: transactionsAsync),
+        _AttendanceStatusCard(async: attendanceSessionsAsync),
+        if (canReadBillingHistory) ...[
+          const SizedBox(height: 12),
+          _PaymentsHistoryCard(async: transactionsAsync),
+          const SizedBox(height: 12),
+          _SubscriptionHistoryCard(async: subscriptionsAsync),
+        ],
         const SizedBox(height: 12),
-        _SubscriptionHistoryCard(async: subscriptionsAsync),
+        _AttendanceSessionsCard(async: attendanceSessionsAsync),
         const SizedBox(height: 12),
         _CheckInHistoryCard(async: checkinsAsync),
         const SizedBox(height: 12),
@@ -1249,6 +1278,95 @@ class _PaymentsHistoryCard extends StatelessWidget {
   }
 }
 
+class _AttendanceStatusCard extends StatelessWidget {
+  const _AttendanceStatusCard({required this.async});
+
+  final AsyncValue<List<AttendanceSession>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const GoldHeading('Attendance Status', fontSize: 16),
+          const SizedBox(height: 14),
+          async.when(
+            loading: () => const _HistoryLoading(),
+            error: (error, _) => _HistoryError(error: error),
+            data: (sessions) {
+              final active = _activeSession(sessions);
+              if (active != null) {
+                return _AttendanceStatusBody(
+                  icon: Icons.login_rounded,
+                  color: greenSuccess,
+                  title: 'Currently Checked In',
+                  rows: [
+                    _InfoRow('Check-in', _formatOptionalDateTime(active.checkInAt)),
+                    _InfoRow('Duration', _sessionDurationLabel(active)),
+                    _InfoRow('Method', _sessionMethodLabel(active.checkInMethod)),
+                    _InfoRow('Plan', _emptyDash(active.planName)),
+                  ],
+                );
+              }
+
+              final lastCompleted = _lastCompletedSession(sessions);
+              return _AttendanceStatusBody(
+                icon: Icons.logout_rounded,
+                color: const Color(0xFF777777),
+                title: 'Not currently checked in',
+                rows: [
+                  _InfoRow(
+                    'Last Checkout',
+                    lastCompleted == null
+                        ? 'No completed sessions'
+                        : _formatOptionalDateTime(lastCompleted.checkOutAt),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceStatusBody extends StatelessWidget {
+  const _AttendanceStatusBody({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.rows,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final List<_InfoRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ApexText(title, color: color, fontWeight: FontWeight.w700),
+              const SizedBox(height: 10),
+              _InfoGrid(rows: rows),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SubscriptionHistoryCard extends StatelessWidget {
   const _SubscriptionHistoryCard({required this.async});
 
@@ -1295,6 +1413,109 @@ class _SubscriptionHistoryCard extends StatelessWidget {
   }
 }
 
+class _AttendanceSessionsCard extends StatelessWidget {
+  const _AttendanceSessionsCard({required this.async});
+
+  final AsyncValue<List<AttendanceSession>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const GoldHeading('Attendance Sessions', fontSize: 16),
+          const SizedBox(height: 14),
+          async.when(
+            loading: () => const _HistoryLoading(),
+            error: (error, _) => _HistoryError(error: error),
+            data: (sessions) {
+              if (sessions.isEmpty) {
+                return const _EmptyHistory('No attendance sessions yet.');
+              }
+              return Column(
+                children: sessions
+                    .map((session) => _AttendanceSessionRow(session: session))
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceSessionRow extends StatelessWidget {
+  const _AttendanceSessionRow({required this.session});
+
+  final AttendanceSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = session.status.trim().isEmpty ? 'unknown' : session.status;
+    final statusColor = _sessionStatusColor(status);
+    final checkOut = session.checkOutAt == null
+        ? 'Still inside'
+        : _formatOptionalDateTime(session.checkOutAt);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderDark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ApexBadge(text: status, color: statusColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ApexText(
+                  _emptyDash(session.planName),
+                  color: const Color(0xFFE2E2E2),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              ApexText(
+                _sessionDurationLabel(session),
+                fontSize: 11,
+                color: statusColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _InfoGrid(
+            rows: [
+              _InfoRow('Check-in', _formatOptionalDateTime(session.checkInAt)),
+              _InfoRow('Check-out', checkOut),
+              _InfoRow('Check-in Method', _sessionMethodLabel(session.checkInMethod)),
+              if ((session.checkOutMethod ?? '').trim().isNotEmpty)
+                _InfoRow(
+                  'Check-out Method',
+                  _sessionMethodLabel(session.checkOutMethod),
+                ),
+            ],
+          ),
+          if ((session.notes ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ApexText(
+              session.notes!.trim(),
+              fontSize: 11,
+              color: const Color(0xFF999999),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _CheckInHistoryCard extends StatelessWidget {
   const _CheckInHistoryCard({required this.async});
 
@@ -1306,7 +1527,7 @@ class _CheckInHistoryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Check-in History', fontSize: 16),
+          const GoldHeading('Legacy Check-in Logs', fontSize: 16),
           const SizedBox(height: 14),
           async.when(
             loading: () => const _HistoryLoading(),
@@ -1475,10 +1696,72 @@ String _formatOptionalDate(DateTime? date) {
 }
 
 String _formatOptionalDateTime(DateTime? date) {
-  if (date == null) return '-';
+  if (date == null) return 'Unknown';
   final hour = date.hour.toString().padLeft(2, '0');
   final minute = date.minute.toString().padLeft(2, '0');
   return '${_formatOptionalDate(date)} $hour:$minute';
+}
+
+AttendanceSession? _activeSession(List<AttendanceSession> sessions) {
+  for (final session in sessions) {
+    if (session.status.trim().toLowerCase() == AttendanceSessionStatus.active) {
+      return session;
+    }
+  }
+  return null;
+}
+
+AttendanceSession? _lastCompletedSession(List<AttendanceSession> sessions) {
+  final completed = sessions
+      .where((session) =>
+          session.status.trim().toLowerCase() ==
+              AttendanceSessionStatus.completed &&
+          session.checkOutAt != null)
+      .toList();
+  if (completed.isEmpty) return null;
+  completed.sort((a, b) => b.checkOutAt!.compareTo(a.checkOutAt!));
+  return completed.first;
+}
+
+String _sessionDurationLabel(AttendanceSession session) {
+  final minutes = _sessionDurationMinutes(session);
+  if (minutes == null) return 'Unknown';
+  if (minutes < 60) return '${minutes}m';
+  final hours = minutes ~/ 60;
+  final remaining = minutes % 60;
+  return '${hours}h ${remaining}m';
+}
+
+int? _sessionDurationMinutes(AttendanceSession session) {
+  if (session.checkOutAt != null && session.durationMinutes != null) {
+    return session.durationMinutes!.clamp(0, 1 << 30);
+  }
+
+  final end = session.checkOutAt ??
+      (session.status.trim().toLowerCase() == AttendanceSessionStatus.active
+          ? DateTime.now()
+          : null);
+  if (end == null) return null;
+  return end.difference(session.checkInAt).inMinutes.clamp(0, 1 << 30);
+}
+
+String _sessionMethodLabel(String? value) {
+  final method = value?.trim();
+  if (method == null || method.isEmpty) return 'Unknown';
+  return method.replaceAll('_', ' ').toUpperCase();
+}
+
+Color _sessionStatusColor(String status) {
+  switch (status.trim().toLowerCase()) {
+    case AttendanceSessionStatus.active:
+      return greenSuccess;
+    case AttendanceSessionStatus.completed:
+      return blueInfo;
+    case AttendanceSessionStatus.cancelled:
+      return orangeWarning;
+    default:
+      return const Color(0xFF666666);
+  }
 }
 
 String _remainingLabel(DateTime? endDate) {

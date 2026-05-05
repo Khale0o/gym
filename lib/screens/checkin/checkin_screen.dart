@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/member_access_eligibility.dart';
 import 'package:gymsaas/models/member.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
@@ -31,6 +35,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   final _accessCodeController = TextEditingController();
   bool _scanning = false;
   bool _checkingIn = false;
+  String? _checkingOutMemberId;
   bool _success = false;
   String? _scannedName;
   String? _scannedPlan;
@@ -78,7 +83,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
           .read(checkInRepositoryProvider)
           .setOccupancy(gymId, nextCount.clamp(0.0, gymCapacity.toDouble()));
     } catch (error) {
-      _showError(error.toString().replaceFirst('StateError: ', ''));
+      _showError(friendlyFirestoreErrorMessage(error));
     }
   }
 
@@ -108,23 +113,34 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       final m = members[Random().nextInt(members.length)];
 
       try {
-        final admission = await ref.read(checkInRepositoryProvider).checkInMember(
+        final admission = await ref
+            .read(checkInRepositoryProvider)
+            .checkInMemberWithSession(
           gymId: gymId,
           memberId: m.id,
           method: 'NFC',
+          createdBy: ref.read(currentAuthUserProvider)?.uid,
         );
         if (!mounted) return;
         setState(() {
-          _scanning = false;
           _success = true;
           _scannedName = admission.memberName;
           _scannedPlan = admission.planName;
         });
-      } catch (error) {
-        if (!mounted) return;
-        setState(() => _scanning = false);
-        _showError(error.toString().replaceFirst('StateError: ', ''));
+      } on StateError catch (error) {
+        _showError(_stateErrorMessage(error));
         return;
+      } on FirebaseException catch (error) {
+        _showError(_friendlyFirestoreError(error));
+        return;
+      } catch (error, stackTrace) {
+        _debugCheckInError(error, stackTrace);
+        _showError('Check-in failed. Please try again.');
+        return;
+      } finally {
+        if (mounted) {
+          setState(() => _scanning = false);
+        }
       }
 
       Future.delayed(const Duration(seconds: 4), () {
@@ -171,14 +187,15 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
         throw StateError(accessMessage);
       }
 
-      final admission = await ref.read(checkInRepositoryProvider).checkInMember(
+      final admission =
+          await ref.read(checkInRepositoryProvider).checkInMemberWithSession(
             gymId: gymId,
             memberId: member.id,
             method: _accessMethodFor(member, code),
+            createdBy: ref.read(currentAuthUserProvider)?.uid,
           );
       if (!mounted) return;
       setState(() {
-        _checkingIn = false;
         _success = true;
         _scannedName = admission.memberName;
         _scannedPlan = admission.planName;
@@ -194,10 +211,17 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       Future.delayed(const Duration(seconds: 4), () {
         if (mounted) setState(() => _success = false);
       });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _checkingIn = false);
-      _showError(error.toString().replaceFirst('StateError: ', ''));
+    } on StateError catch (error) {
+      _showError(_stateErrorMessage(error));
+    } on FirebaseException catch (error) {
+      _showError(_friendlyFirestoreError(error));
+    } catch (error, stackTrace) {
+      _debugCheckInError(error, stackTrace);
+      _showError('Check-in failed. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _checkingIn = false);
+      }
     }
   }
 
@@ -216,10 +240,78 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
     return 'Access Code';
   }
 
+  Future<void> _checkOutMember(AttendanceSession session) async {
+    if (_checkingOutMemberId != null) return;
+
+    final gymId = ref.read(currentGymIdProvider)?.trim();
+    if (gymId == null || gymId.isEmpty) {
+      _showError('Missing gym context.');
+      return;
+    }
+
+    setState(() => _checkingOutMemberId = session.memberId);
+    try {
+      await ref.read(checkInRepositoryProvider).checkOutMember(
+            gymId: gymId,
+            memberId: session.memberId,
+            method: 'manual',
+            checkedOutBy: ref.read(currentAuthUserProvider)?.uid,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Checked out ${session.memberName}.'),
+          backgroundColor: greenSuccess,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showError(friendlyFirestoreErrorMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() => _checkingOutMemberId = null);
+      }
+    }
+  }
+
+  String _stateErrorMessage(StateError error) {
+    final message = error.toString();
+    const badStatePrefix = 'Bad state: ';
+    const stateErrorPrefix = 'StateError: ';
+    if (message.startsWith(badStatePrefix)) {
+      return message.substring(badStatePrefix.length);
+    }
+    if (message.startsWith(stateErrorPrefix)) {
+      return message.substring(stateErrorPrefix.length);
+    }
+    return message;
+  }
+
+  String _friendlyFirestoreError(FirebaseException error) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'You do not have permission to check members in or out. Your account may be inactive or not linked to this gym.';
+      case 'unavailable':
+        return 'Firestore is unavailable right now. Please try again.';
+      case 'deadline-exceeded':
+        return 'Check-in took too long. Please try again.';
+      default:
+        return 'Check-in failed. Please try again.';
+    }
+  }
+
+  void _debugCheckInError(Object error, StackTrace stackTrace) {
+    if (kDebugMode) {
+      debugPrint('Check-in failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final occupancyAsync = ref.watch(occupancyStreamProvider);
     final checkinsAsync = ref.watch(recentCheckinsProvider);
+    final activeSessionsAsync = ref.watch(activeAttendanceSessionsProvider);
 
     return Scaffold(
       backgroundColor: bgDark,
@@ -268,6 +360,14 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
 
             const SizedBox(height: 24),
 
+            _ActiveSessionsCard(
+              async: activeSessionsAsync,
+              checkingOutMemberId: _checkingOutMemberId,
+              onCheckOut: _checkOutMember,
+            ),
+
+            const SizedBox(height: 24),
+
             /// ACCESS LOG (FULL ORIGINAL)
             ApexCard(
               child: Column(
@@ -285,7 +385,10 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                         ),
                       ),
                     ),
-                    error: (_, __) => const ApexText('Error'),
+                    error: (error, _) => ApexText(
+                      friendlyFirestoreErrorMessage(error),
+                      color: orangeWarning,
+                    ),
                     data: (list) => Column(
                       children: list.take(8).toList().asMap().entries.map((e) {
                         final i = e.key;
@@ -530,17 +633,19 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   Widget _buildOccupancy(AsyncValue<double> occupancyAsync) {
     return occupancyAsync.when(
       loading: () => const ShimmerCard(),
-      error: (_, __) => const ApexText('Error'),
-      data: (count) {
-        final pct =
-            (count / gymCapacity * 100).clamp(0.0, 100.0);
+      error: (error, _) => ApexText(
+        friendlyFirestoreErrorMessage(error),
+        color: orangeWarning,
+      ),
+      data: (occupancyCount) {
+        final pct = (occupancyCount / gymCapacity * 100).clamp(0.0, 100.0);
         return ApexCard(
           child: Column(
             children: [
               const GoldHeading('Live Occupancy'),
               const SizedBox(height: 16),
               OccupancyRing(
-                current: count,
+                current: occupancyCount,
                 capacity: gymCapacity,
                 compact: true,
               ),
@@ -552,21 +657,21 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                   _OccBtn(
                     icon: Icons.remove_rounded,
                     onTap: () => _changeOccupancy(
-                      (count - 1).clamp(0.0, gymCapacity.toDouble()),
+                      (occupancyCount - 1).clamp(0.0, gymCapacity.toDouble()),
                     ),
                   ),
                   const SizedBox(width: 24),
                   _OccBtn(
                     icon: Icons.add_rounded,
                     onTap: () => _changeOccupancy(
-                      (count + 1).clamp(0.0, gymCapacity.toDouble()),
+                      (occupancyCount + 1).clamp(0.0, gymCapacity.toDouble()),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               Slider(
-                value: count.clamp(0.0, gymCapacity.toDouble()),
+                value: occupancyCount.clamp(0.0, gymCapacity.toDouble()),
                 min: 0,
                 max: gymCapacity.toDouble(),
                 divisions: gymCapacity,
@@ -636,6 +741,215 @@ class _OccBtn extends StatelessWidget {
           border: Border.all(color: borderDark),
         ),
         child: Icon(icon, color: gold, size: 20),
+      ),
+    );
+  }
+}
+
+class _ActiveSessionsCard extends StatelessWidget {
+  const _ActiveSessionsCard({
+    required this.async,
+    required this.checkingOutMemberId,
+    required this.onCheckOut,
+  });
+
+  final AsyncValue<List<AttendanceSession>> async;
+  final String? checkingOutMemberId;
+  final ValueChanged<AttendanceSession> onCheckOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const GoldHeading('Active Sessions'),
+          const SizedBox(height: 16),
+          async.when(
+            loading: () => Column(
+              children: List.generate(
+                3,
+                (_) => const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: ShimmerCard(),
+                ),
+              ),
+            ),
+            error: (error, _) => ApexText(
+              'Could not load active sessions: ${friendlyFirestoreErrorMessage(error)}',
+              color: orangeWarning,
+              fontSize: 12,
+            ),
+            data: (sessions) {
+              if (sessions.isEmpty) {
+                return const ApexText(
+                  'No members are currently checked in.',
+                  color: Color(0xFF555555),
+                  fontSize: 12,
+                );
+              }
+
+              return Column(
+                children: sessions
+                    .map(
+                      (session) => _ActiveSessionRow(
+                        session: session,
+                        checkingOut:
+                            checkingOutMemberId == session.memberId,
+                        onCheckOut: () => onCheckOut(session),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveSessionRow extends StatelessWidget {
+  const _ActiveSessionRow({
+    required this.session,
+    required this.checkingOut,
+    required this.onCheckOut,
+  });
+
+  final AttendanceSession session;
+  final bool checkingOut;
+  final VoidCallback onCheckOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final duration = DateTime.now().difference(session.checkInAt);
+    final durationLabel = _durationLabel(duration);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderDark),
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ActiveSessionInfo(
+                  session: session,
+                  durationLabel: durationLabel,
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: _CheckOutButton(
+                    checkingOut: checkingOut,
+                    onPressed: onCheckOut,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: _ActiveSessionInfo(
+                    session: session,
+                    durationLabel: durationLabel,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _CheckOutButton(
+                  checkingOut: checkingOut,
+                  onPressed: onCheckOut,
+                ),
+              ],
+            ),
+    );
+  }
+
+  static String _durationLabel(Duration duration) {
+    final minutes = duration.inMinutes.clamp(0, 1 << 30);
+    if (minutes < 60) return '${minutes}m';
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    return '${hours}h ${rest}m';
+  }
+}
+
+class _ActiveSessionInfo extends StatelessWidget {
+  const _ActiveSessionInfo({
+    required this.session,
+    required this.durationLabel,
+  });
+
+  final AttendanceSession session;
+  final String durationLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.person_pin_circle_rounded, color: gold, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ApexText(
+                session.memberName,
+                color: const Color(0xFFDDDDDD),
+                fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(height: 3),
+              ApexText(
+                'In ${_timeLabel(session.checkInAt)} • $durationLabel',
+                fontSize: 11,
+                color: const Color(0xFF777777),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _timeLabel(DateTime value) {
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+}
+
+class _CheckOutButton extends StatelessWidget {
+  const _CheckOutButton({
+    required this.checkingOut,
+    required this.onPressed,
+  });
+
+  final bool checkingOut;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: checkingOut ? null : onPressed,
+      icon: checkingOut
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF080808),
+              ),
+            )
+          : const Icon(Icons.logout_rounded, size: 16),
+      label: Text(checkingOut ? 'Checking out' : 'Check Out'),
+      style: FilledButton.styleFrom(
+        backgroundColor: gold,
+        foregroundColor: const Color(0xFF080808),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/checkin.dart';
 import 'package:gymsaas/models/dashboard_summary.dart';
 import 'package:gymsaas/models/gym_settings.dart';
@@ -84,11 +85,12 @@ final gymMemberByIdProvider =
 
 final currentLinkedMemberProvider = FutureProvider<Member?>((ref) {
   final gymId = _requireCurrentGymId(ref);
-  final user = ref.watch(currentAuthUserProvider);
-  if (user == null) {
-    throw StateError('No signed-in user is available.');
+  final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+  final linkedMemberId = profile?.linkedMemberId?.trim();
+  if (linkedMemberId == null || linkedMemberId.isEmpty) {
+    throw StateError('No linked member profile is available.');
   }
-  return ref.watch(memberRepositoryProvider).getMemberByAuthUid(gymId, user.uid);
+  return ref.watch(memberRepositoryProvider).getMember(gymId, linkedMemberId);
 });
 
 final gymStaffProvider = StreamProvider<List<Staff>>((ref) {
@@ -169,6 +171,38 @@ final memberCheckinsProvider =
   return ref
       .watch(checkInRepositoryProvider)
       .streamMemberCheckins(gymId, memberId);
+});
+
+final activeAttendanceSessionsProvider =
+    StreamProvider<List<AttendanceSession>>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(checkInRepositoryProvider).streamActiveAttendanceSessions(
+        gymId,
+      );
+});
+
+final memberActiveAttendanceSessionProvider =
+    StreamProvider.family<AttendanceSession?, String>((ref, memberId) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref
+      .watch(checkInRepositoryProvider)
+      .streamMemberActiveAttendanceSession(gymId, memberId);
+});
+
+final memberAttendanceSessionsProvider =
+    StreamProvider.family<List<AttendanceSession>, String>((ref, memberId) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref
+      .watch(checkInRepositoryProvider)
+      .streamMemberAttendanceSessions(gymId, memberId);
+});
+
+final recentAttendanceSessionsProvider =
+    StreamProvider<List<AttendanceSession>>((ref) {
+  final gymId = _requireCurrentGymId(ref);
+  return ref.watch(checkInRepositoryProvider).streamRecentAttendanceSessions(
+        gymId,
+      );
 });
 
 final activeMemberSubscriptionProvider =

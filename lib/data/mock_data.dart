@@ -7,15 +7,23 @@ import 'package:gymsaas/models/member.dart';
 /// Development only:
 /// - never call this automatically from normal UI flow
 /// - never expose this in release mode
-Future<void> seedFirestore() async {
+Future<void> seedFirestore(String gymId) async {
   if (!kDebugMode) {
     throw StateError('Demo seeding is disabled outside debug mode.');
   }
+  final trimmedGymId = gymId.trim();
+  if (trimmedGymId.isEmpty) {
+    throw StateError('Demo seeding requires a gymId.');
+  }
 
   final db = FirebaseFirestore.instance;
+  final gymRef = db.collection('gyms').doc(trimmedGymId);
 
-  await db.doc('occupancy/current').set({'count': 23});
-  await db.doc('settings/general').set({'capacity': 60});
+  await gymRef.collection('settings').doc('occupancy').set({
+    'count': 23,
+    'capacity': 60,
+    'updatedAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 
   final plans = [
     {'name': 'Basic', 'price': 150, 'membersCount': 68},
@@ -23,13 +31,23 @@ Future<void> seedFirestore() async {
     {'name': 'Elite', 'price': 420, 'membersCount': 23},
   ];
   for (final p in plans) {
-    await db.collection('plans').add(p);
+    await gymRef.collection('plans').add({
+      ...p,
+      'gymId': trimmedGymId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   final members = _buildMembers();
   final Map<String, String> memberIdByName = {};
   for (final m in members) {
-    final ref = await db.collection('members').add(m.toMap());
+    final ref = await gymRef.collection('members').add({
+      ...m.toMap(),
+      'gymId': trimmedGymId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
     memberIdByName[m.name] = ref.id;
   }
 
@@ -47,7 +65,8 @@ Future<void> seedFirestore() async {
   final methods = ['NFC', 'QR', 'Manual'];
   final ciPlans = ['Basic', 'Premium', 'Elite'];
   for (var i = 0; i < 8; i++) {
-    await db.collection('checkins').add({
+    await gymRef.collection('checkins').add({
+      'gymId': trimmedGymId,
       'memberId': memberIdByName.values.elementAt(i % memberIdByName.length),
       'name': checkInNames[i % checkInNames.length],
       'time': Timestamp.fromDate(now.subtract(Duration(minutes: i * 12))),
@@ -67,9 +86,11 @@ Future<void> seedFirestore() async {
     {'category': 'Walk-in Fees', 'amount': 950, 'type': 'income'},
   ];
   for (var i = 0; i < txData.length; i++) {
-    await db.collection('transactions').add({
+    await gymRef.collection('transactions').add({
       ...txData[i],
+      'gymId': trimmedGymId,
       'date': Timestamp.fromDate(now.subtract(Duration(days: i * 3))),
+      'createdAt': Timestamp.fromDate(now.subtract(Duration(days: i * 3))),
     });
   }
 
@@ -85,7 +106,14 @@ Future<void> seedFirestore() async {
     {'name': 'Amr G.', 'role': 'Cleaner', 'onDuty': true},
   ];
   for (final s in staffData) {
-    await db.collection('staff').add(s);
+    await gymRef.collection('staff').add({
+      ...s,
+      'gymId': trimmedGymId,
+      'fullName': s['name'],
+      'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 }
 

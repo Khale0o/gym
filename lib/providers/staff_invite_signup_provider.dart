@@ -36,6 +36,15 @@ class StaffInviteSignupController {
   }) async {
     User? createdUser;
     final normalizedEmail = email.trim().toLowerCase();
+    final localValidationError = _validateBeforeAuthCreate(
+      fullName: fullName,
+      email: normalizedEmail,
+      password: password,
+    );
+    if (localValidationError != null) {
+      return localValidationError;
+    }
+
     final oldUser = _auth.currentUser;
     _debugLog('Old currentUser before signup starts: ${oldUser?.uid ?? 'none'}');
 
@@ -111,7 +120,7 @@ class StaffInviteSignupController {
       if (createdUser != null) {
         return await _cleanupCreatedAuthUser(
           createdUser,
-          _mapClaimFailureAfterAuth(
+          _mapFailureAfterAuth(
             'Firebase Auth update failed (${error.code}): ${error.message ?? 'Auth error'}',
           ),
         );
@@ -122,7 +131,7 @@ class StaffInviteSignupController {
       if (createdUser != null) {
         return await _cleanupCreatedAuthUser(
           createdUser,
-          _mapClaimFailureAfterAuth(error),
+          _mapFailureAfterAuth(error),
         );
       }
       await _auth.signOut();
@@ -145,27 +154,56 @@ class StaffInviteSignupController {
     }
   }
 
+  String? _validateBeforeAuthCreate({
+    required String fullName,
+    required String email,
+    required String password,
+  }) {
+    if (fullName.trim().isEmpty) {
+      return 'Full name is required.';
+    }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      return 'Please enter a valid email address.';
+    }
+    if (password.length < 8) {
+      return 'Weak password. Use at least 8 characters.';
+    }
+    return null;
+  }
+
   Future<String> _cleanupCreatedAuthUser(User createdUser, String reason) async {
     try {
       _debugLog('Attempting to delete newly created Auth user: ${createdUser.uid}');
       await createdUser.delete();
       await _auth.signOut();
       _debugLog('Newly created Auth user deleted after claim failure.');
-      return '$reason No staff profile was created. Please try again.';
+      return '$reason No app profile was created. Please try again.';
     } catch (cleanupError) {
       _debugLog('Auth cleanup failed: $cleanupError');
       await _auth.signOut();
-      return '$reason The Auth account was created, but the invite claim failed and automatic cleanup failed. Please contact support to clean up the account.';
+      return '$reason The Auth account was created, but invite setup failed and automatic cleanup failed. Please contact the gym owner/admin to clean up the account.';
     }
   }
 
-  String _mapClaimFailureAfterAuth(Object error) {
+  String _mapFailureAfterAuth(Object error) {
     final message = error.toString().replaceFirst('Bad state: ', '');
-    if (message.contains('permission-denied') ||
-        message.toLowerCase().contains('blocked by firestore rules')) {
-      return 'Claim transaction failed because Firestore rules blocked the write.';
+    final lower = message.toLowerCase();
+    if (lower.contains('collection group index') ||
+        lower.contains('requires a firestore') ||
+        lower.contains('failed-precondition')) {
+      return 'Invite lookup needs a Firestore index before signup can finish.';
     }
-    return 'Claim transaction failed: $message';
+    if (lower.contains('permission-denied') ||
+        lower.contains('blocked by firestore rules')) {
+      return 'Invite lookup or claim was blocked by Firestore rules. Please contact the gym owner/admin.';
+    }
+    if (lower.contains('no pending invite')) {
+      return 'No pending invite was found for this email. Ask the gym owner/admin to send an invite first.';
+    }
+    if (lower.contains('expired')) {
+      return 'This invite has expired. Ask the gym owner/admin to send a new invite.';
+    }
+    return 'Invite signup failed: $message';
   }
 
   void _debugLog(String message) {
