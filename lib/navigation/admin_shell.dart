@@ -38,8 +38,6 @@ class AdminShell extends ConsumerStatefulWidget {
 }
 
 class _AdminShellState extends ConsumerState<AdminShell> {
-  bool _collapsed = false;
-
   bool _isActive(String route, String current) {
     if (route == dashboardRoute) return current == dashboardRoute;
     return current.startsWith(route);
@@ -48,7 +46,7 @@ class _AdminShellState extends ConsumerState<AdminShell> {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final sidebarW = _collapsed ? 64.0 : 220.0;
+    const sidebarW = 248.0;
     final isWide = MediaQuery.of(context).size.width > 900;
     final profileAsync = ref.watch(currentUserProfileProvider);
     if (profileAsync.isLoading) {
@@ -77,90 +75,118 @@ class _AdminShellState extends ConsumerState<AdminShell> {
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
       width: sidebarW,
-      color: const Color(0xFF090909),
+      color: ApexColors.surface,
       child: Column(
         children: [
           Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: 78,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
             decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: borderDark)),
+              border: Border(bottom: BorderSide(color: ApexColors.border)),
             ),
-            child: Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showRole = constraints.maxWidth >= 270;
+                return Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [gold, goldDark],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      ),
+                      child: const Icon(
+                        Icons.fitness_center,
+                        color: Colors.black,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'APEX',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cinzel(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: gold,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ),
+                          if (showRole) ...[
+                            const SizedBox(width: 8),
+                            const ApexText(
+                              'Admin',
+                              fontSize: 11,
+                              color: ApexColors.textMuted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (isWide)
+                      _ShellHeaderIconButton(
+                        icon: const Icon(
+                          Icons.logout_rounded,
+                          color: ApexColors.textMuted,
+                          size: 18,
+                        ),
+                        onPressed: () =>
+                            ref.read(authControllerProvider).signOut(),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [gold, goldDark],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.fitness_center,
-                    color: Colors.black,
-                    size: 18,
-                  ),
-                ),
-                if (!_collapsed) ...[
-                  const SizedBox(width: 10),
-                  Text(
-                    'APEX',
-                    style: GoogleFonts.cinzel(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: gold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                if (isWide)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.logout_rounded,
-                      color: Color(0xFF555555),
-                      size: 18,
-                    ),
-                    onPressed: () => ref.read(authControllerProvider).signOut(),
-                  ),
-                if (isWide)
-                  IconButton(
-                    icon: Icon(
-                      _collapsed
-                          ? Icons.chevron_right_rounded
-                          : Icons.chevron_left_rounded,
-                      color: const Color(0xFF555555),
-                      size: 18,
-                    ),
-                    onPressed: () => setState(() => _collapsed = !_collapsed),
-                  ),
+                const _NavSectionLabel('Workspace'),
+                ...visibleNavItems
+                    .where((item) => item.route != settingsRoute)
+                    .map((item) {
+                  final active = _isActive(item.route, location);
+                  return _NavTile(
+                    item: item,
+                    active: active,
+                    collapsed: false,
+                    onTap: () => context.go(item.route),
+                  );
+                }),
+                const SizedBox(height: 14),
+                const _NavSectionLabel('System'),
+                ...visibleNavItems
+                    .where((item) => item.route == settingsRoute)
+                    .map((item) {
+                  final active = _isActive(item.route, location);
+                  return _NavTile(
+                    item: item,
+                    active: active,
+                    collapsed: false,
+                    onTap: () => context.go(item.route),
+                  );
+                }),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              children: visibleNavItems.map((item) {
-                final active = _isActive(item.route, location);
-                return _NavTile(
-                  item: item,
-                  active: active,
-                  collapsed: _collapsed,
-                  onTap: () => context.go(item.route),
-                );
-              }).toList(),
-            ),
-          ),
-          const Divider(color: borderDark, height: 1),
+          const Divider(color: ApexColors.border, height: 1),
           ref.watch(occupancyStreamProvider).when(
                 data: (count) => _OccupancyIndicator(
                   count: count.round(),
-                  collapsed: _collapsed,
+                  collapsed: false,
                 ),
                 loading: () => const SizedBox(height: 56),
                 error: (_, __) => const SizedBox(height: 56),
@@ -174,11 +200,11 @@ class _AdminShellState extends ConsumerState<AdminShell> {
       return Scaffold(
         backgroundColor: bgDark,
         drawer: Drawer(
-          backgroundColor: const Color(0xFF090909),
+          backgroundColor: ApexColors.surface,
           child: SafeArea(child: sidebar),
         ),
         appBar: AppBar(
-          backgroundColor: const Color(0xFF090909),
+          backgroundColor: ApexColors.surface,
           foregroundColor: gold,
           title: Text(
             'APEX',
@@ -210,9 +236,52 @@ class _AdminShellState extends ConsumerState<AdminShell> {
       body: Row(
         children: [
           sidebar,
-          const VerticalDivider(width: 1, color: borderDark),
+          const VerticalDivider(width: 1, color: ApexColors.border),
           Expanded(child: widget.child),
         ],
+      ),
+    );
+  }
+}
+
+class _ShellHeaderIconButton extends StatelessWidget {
+  const _ShellHeaderIconButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final Widget icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 36,
+      child: IconButton(
+        icon: icon,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+        splashRadius: 18,
+      ),
+    );
+  }
+}
+
+class _NavSectionLabel extends StatelessWidget {
+  const _NavSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      child: ApexText(
+        label.toUpperCase(),
+        fontSize: 10,
+        color: ApexColors.textMuted,
+        fontWeight: FontWeight.w800,
       ),
     );
   }
@@ -241,12 +310,13 @@ class _NavTileState extends State<_NavTile> {
   @override
   Widget build(BuildContext context) {
     final bg = widget.active
-        ? gold.withOpacity(0.12)
+        ? gold.withValues(alpha: 0.14)
         : _hovered
-            ? const Color(0xFF111111)
+            ? ApexColors.surfaceAlt
             : Colors.transparent;
-    final iconColor = widget.active ? gold : const Color(0xFF555555);
-    final textColor = widget.active ? gold : const Color(0xFF666666);
+    final iconColor = widget.active ? gold : ApexColors.textMuted;
+    final textColor =
+        widget.active ? ApexColors.textPrimary : ApexColors.textSecondary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -257,14 +327,14 @@ class _NavTileState extends State<_NavTile> {
           duration: const Duration(milliseconds: 150),
           margin: const EdgeInsets.symmetric(vertical: 2),
           padding: EdgeInsets.symmetric(
-            horizontal: widget.collapsed ? 14 : 12,
-            vertical: 10,
+            horizontal: widget.collapsed ? 14 : 13,
+            vertical: 11,
           ),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(ApexRadius.md),
             border: widget.active
-                ? Border.all(color: gold.withOpacity(0.2))
+                ? Border.all(color: gold.withValues(alpha: 0.35))
                 : null,
           ),
           child: Row(
@@ -272,16 +342,26 @@ class _NavTileState extends State<_NavTile> {
                 ? MainAxisAlignment.center
                 : MainAxisAlignment.start,
             children: [
-              Icon(widget.item.icon, color: iconColor, size: 18),
+              Icon(widget.item.icon, color: iconColor, size: 19),
               if (!widget.collapsed) ...[
-                const SizedBox(width: 10),
+                const SizedBox(width: 11),
                 ApexText(
                   widget.item.label,
                   fontSize: 13,
                   color: textColor,
                   fontWeight:
-                      widget.active ? FontWeight.w600 : FontWeight.w400,
+                      widget.active ? FontWeight.w800 : FontWeight.w500,
                 ),
+                const Spacer(),
+                if (widget.active)
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: gold,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
               ],
             ],
           ),
@@ -303,7 +383,7 @@ class _OccupancyIndicator extends StatelessWidget {
     final color = ocColor(pct);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: collapsed
           ? Center(
               child: Container(
@@ -323,8 +403,8 @@ class _OccupancyIndicator extends StatelessWidget {
                 const SizedBox(width: 8),
                 ApexText(
                   '$count / $gymCapacity live',
-                  fontSize: 11,
-                  color: const Color(0xFF555555),
+                  fontSize: 12,
+                  color: ApexColors.textMuted,
                 ),
               ],
             ),

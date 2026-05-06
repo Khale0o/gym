@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/dashboard_summary.dart';
+import 'package:gymsaas/models/member.dart';
 import 'package:gymsaas/models/subscription.dart';
 import 'package:gymsaas/models/transaction_model.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
@@ -37,6 +39,7 @@ class DashboardScreen extends ConsumerWidget {
         data: (summary) => _DashboardBody(
           gymId: gymId ?? '',
           summary: summary,
+          activeSessionsAsync: ref.watch(activeAttendanceSessionsProvider),
         ),
       ),
     );
@@ -47,50 +50,82 @@ class _DashboardBody extends StatelessWidget {
   const _DashboardBody({
     required this.gymId,
     required this.summary,
+    required this.activeSessionsAsync,
   });
 
   final String gymId;
   final DashboardSummary summary;
+  final AsyncValue<List<AttendanceSession>> activeSessionsAsync;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 700;
-        final isWide = constraints.maxWidth > 1100;
+        final isWide = constraints.maxWidth > 1180;
+        final horizontalPadding = isMobile ? 16.0 : 32.0;
 
         return SingleChildScrollView(
-          padding: EdgeInsets.all(isMobile ? 16 : 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Header(gymId: gymId),
-              const SizedBox(height: 24),
-              _KpiGrid(summary: summary, compact: isMobile, wide: isWide),
-              const SizedBox(height: 24),
-              if (summary.isEmptyGym) ...[
-                const _EmptyDashboardState(),
-                const SizedBox(height: 16),
-              ],
-              if (isMobile) ...[
-                _OccupancySection(summary: summary),
-                const SizedBox(height: 16),
-                _RecentPayments(summary: summary),
-                const SizedBox(height: 16),
-                _RecentCheckins(summary: summary),
-              ] else ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: _OccupancySection(summary: summary)),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 5, child: _RecentPayments(summary: summary)),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: isMobile ? 20 : 32,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1280),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Header(gymId: gymId),
+                  const SizedBox(height: 30),
+                  const _SectionHeader(
+                    title: 'Key Metrics',
+                    subtitle: 'Tap any card for records and operational detail.',
+                  ),
+                  const SizedBox(height: 14),
+                  _KpiGrid(
+                    summary: summary,
+                    compact: isMobile,
+                    wide: isWide,
+                    activeSessionsAsync: activeSessionsAsync,
+                  ),
+                  const SizedBox(height: 30),
+                  if (summary.isEmptyGym) ...[
+                    const _EmptyDashboardState(),
+                    const SizedBox(height: 24),
                   ],
-                ),
-                const SizedBox(height: 16),
-                _RecentCheckins(summary: summary),
-              ],
-            ],
+                  const _SectionHeader(
+                    title: 'Operations',
+                    subtitle: 'Live occupancy, recent receipts, and attendance activity.',
+                  ),
+                  const SizedBox(height: 14),
+                  if (isMobile) ...[
+                    _OccupancySection(summary: summary),
+                    const SizedBox(height: 16),
+                    _RecentPayments(summary: summary),
+                    const SizedBox(height: 16),
+                    _RecentCheckins(summary: summary),
+                  ] else ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: isWide ? 4 : 5,
+                          child: _OccupancySection(summary: summary),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          flex: isWide ? 7 : 6,
+                          child: _RecentPayments(summary: summary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _RecentCheckins(summary: summary),
+                  ],
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -112,41 +147,75 @@ class _Header extends StatelessWidget {
             ? 'Good Afternoon'
             : 'Good Evening';
 
-    return Row(
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: ApexDecorations.card(
+        color: ApexColors.surface,
+        borderColor: ApexColors.border,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GoldHeading('$greeting, Admin', fontSize: 22),
+                const SizedBox(height: 8),
+                ApexText(
+                  '${DateFormat('EEEE, d MMMM yyyy').format(now)} - $gymId',
+                  fontSize: 13,
+                  color: ApexColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: ApexDecorations.badge(greenSuccess),
+            child: const Row(
+              children: [
+                _PulseDot(),
+                SizedBox(width: 7),
+                ApexText(
+                  'Live',
+                  fontSize: 12,
+                  color: greenSuccess,
+                  fontWeight: FontWeight.w700,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GoldHeading('$greeting, Admin', fontSize: 20),
-              const SizedBox(height: 4),
-              ApexText(
-                '${DateFormat('EEEE, d MMMM yyyy').format(now)} - $gymId',
-                fontSize: 12,
-                color: const Color(0xFF555555),
-              ),
-            ],
-          ),
+        ApexText(
+          title,
+          fontSize: 16,
+          color: ApexColors.textPrimary,
+          fontWeight: FontWeight.w800,
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: greenSuccess.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: greenSuccess.withValues(alpha: 0.2)),
-          ),
-          child: const Row(
-            children: [
-              _PulseDot(),
-              SizedBox(width: 6),
-              ApexText(
-                'Live',
-                fontSize: 11,
-                color: greenSuccess,
-                fontWeight: FontWeight.w600,
-              ),
-            ],
-          ),
+        const SizedBox(height: 5),
+        ApexText(
+          subtitle,
+          fontSize: 13,
+          color: ApexColors.textMuted,
         ),
       ],
     );
@@ -158,102 +227,184 @@ class _KpiGrid extends StatelessWidget {
     required this.summary,
     required this.compact,
     required this.wide,
+    required this.activeSessionsAsync,
   });
 
   final DashboardSummary summary;
   final bool compact;
   final bool wide;
+  final AsyncValue<List<AttendanceSession>> activeSessionsAsync;
 
   @override
   Widget build(BuildContext context) {
-    final crossAxisCount = compact ? 2 : (wide ? 4 : 3);
-    final ratio = compact ? 0.96 : 1.34;
+    final crossAxisCount = compact ? 1 : (wide ? 3 : 2);
+    final ratio = compact ? 2.45 : (wide ? 1.95 : 1.78);
+    final inactiveMembers = summary.totalMembers - summary.activeMembers;
+    final cards = [
+      _KpiCard(
+        icon: Icons.people_rounded,
+        label: 'Total Members',
+        value: '${summary.totalMembers}',
+        detail: '${summary.activeMembers} active',
+        accent: blueInfo,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.totalMembers,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.how_to_reg_rounded,
+        label: 'Active Members',
+        value: '${summary.activeMembers}',
+        detail: '${inactiveMembers < 0 ? 0 : inactiveMembers} inactive',
+        accent: greenSuccess,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.activeMembers,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.verified_rounded,
+        label: 'Active Subscriptions',
+        value: '${summary.activeSubscriptions}',
+        detail: '${summary.expiredSubscriptions} expired',
+        accent: greenSuccess,
+        good: summary.expiredSubscriptions == 0,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.activeSubscriptions,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.warning_amber_rounded,
+        label: 'Expiring Soon',
+        value: '${summary.expiringSoonSubscriptions}',
+        detail: 'Next 7 days',
+        accent: orangeWarning,
+        good: summary.expiringSoonSubscriptions == 0,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.expiringSoon,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.login_rounded,
+        label: 'Today Check-ins',
+        value: '${summary.todayCheckins}',
+        detail: 'Since midnight',
+        accent: blueInfo,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.todayCheckins,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.payments_rounded,
+        label: 'Today Revenue',
+        value: _money(summary.todayRevenue),
+        detail: 'Paid/partial',
+        accent: gold,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.todayRevenue,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.calendar_month_rounded,
+        label: 'Month Revenue',
+        value: _money(summary.monthRevenue),
+        detail: 'Current month',
+        accent: greenSuccess,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.monthRevenue,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.cancel_rounded,
+        label: 'Expired Subscriptions',
+        value: '${summary.expiredSubscriptions}',
+        detail: 'End date passed',
+        accent: redAlert,
+        good: summary.expiredSubscriptions == 0,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.expiredSubscriptions,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+      _KpiCard(
+        icon: Icons.sensor_occupied_rounded,
+        label: 'Current Occupancy',
+        value: '${summary.occupancyCount}',
+        detail: summary.occupancyCapacity > 0
+            ? '/ ${summary.occupancyCapacity}'
+            : 'No capacity',
+        accent: orangeWarning,
+        good: true,
+        compact: compact,
+        onTap: () => _showKpiDetails(
+          context,
+          _DashboardKpi.occupancy,
+          summary,
+          activeSessionsAsync,
+        ),
+      ),
+    ];
+
+    if (compact) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 320 ? 2 : 1;
+          return GridView.count(
+            crossAxisCount: columns,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: columns == 2 ? 0.98 : 2.45,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: cards,
+          );
+        },
+      );
+    }
 
     return GridView.count(
       crossAxisCount: crossAxisCount,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
+      mainAxisSpacing: 14,
+      crossAxisSpacing: 14,
       childAspectRatio: ratio,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _KpiCard(
-          icon: Icons.people_rounded,
-          label: 'Total Members',
-          value: '${summary.totalMembers}',
-          detail: '${summary.activeMembers} active',
-          accent: blueInfo,
-          good: true,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.totalMembers, summary),
-        ),
-        _KpiCard(
-          icon: Icons.verified_rounded,
-          label: 'Active Subscriptions',
-          value: '${summary.activeSubscriptions}',
-          detail: '${summary.expiredSubscriptions} expired',
-          accent: greenSuccess,
-          good: summary.expiredSubscriptions == 0,
-          onTap: () =>
-              _showKpiSheet(context, _DashboardKpi.activeSubscriptions, summary),
-        ),
-        _KpiCard(
-          icon: Icons.warning_amber_rounded,
-          label: 'Expiring Soon',
-          value: '${summary.expiringSoonSubscriptions}',
-          detail: 'Next 7 days',
-          accent: orangeWarning,
-          good: summary.expiringSoonSubscriptions == 0,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.expiringSoon, summary),
-        ),
-        _KpiCard(
-          icon: Icons.login_rounded,
-          label: 'Today Check-ins',
-          value: '${summary.todayCheckins}',
-          detail: 'Since midnight',
-          accent: blueInfo,
-          good: true,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.todayCheckins, summary),
-        ),
-        _KpiCard(
-          icon: Icons.payments_rounded,
-          label: 'Today Revenue',
-          value: _money(summary.todayRevenue),
-          detail: 'Paid/partial',
-          accent: gold,
-          good: true,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.todayRevenue, summary),
-        ),
-        _KpiCard(
-          icon: Icons.calendar_month_rounded,
-          label: 'Month Revenue',
-          value: _money(summary.monthRevenue),
-          detail: 'Current month',
-          accent: greenSuccess,
-          good: true,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.monthRevenue, summary),
-        ),
-        _KpiCard(
-          icon: Icons.cancel_rounded,
-          label: 'Expired Subscriptions',
-          value: '${summary.expiredSubscriptions}',
-          detail: 'End date passed',
-          accent: redAlert,
-          good: summary.expiredSubscriptions == 0,
-          onTap: () =>
-              _showKpiSheet(context, _DashboardKpi.expiredSubscriptions, summary),
-        ),
-        _KpiCard(
-          icon: Icons.sensor_occupied_rounded,
-          label: 'Current Occupancy',
-          value: '${summary.occupancyCount}',
-          detail: summary.occupancyCapacity > 0
-              ? '/ ${summary.occupancyCapacity}'
-              : 'No capacity',
-          accent: orangeWarning,
-          good: true,
-          onTap: () => _showKpiSheet(context, _DashboardKpi.occupancy, summary),
-        ),
-      ],
+      children: cards,
     );
   }
 }
@@ -266,6 +417,7 @@ class _KpiCard extends StatelessWidget {
     required this.detail,
     required this.accent,
     required this.good,
+    required this.compact,
     required this.onTap,
   });
 
@@ -275,6 +427,7 @@ class _KpiCard extends StatelessWidget {
   final String detail;
   final Color accent;
   final bool good;
+  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -284,68 +437,70 @@ class _KpiCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: ApexRadius.card,
         child: ApexCard(
+          padding: EdgeInsets.all(compact ? 12 : 18),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 34,
-                    height: 34,
+                    width: compact ? 28 : 34,
+                    height: compact ? 28 : 34,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(ApexRadius.md),
                     ),
-                    child: Icon(icon, color: accent, size: 18),
+                    child: Icon(icon, color: accent, size: compact ? 16 : 18),
                   ),
                   const Spacer(),
                   const Icon(
-                    Icons.keyboard_arrow_up_rounded,
+                    Icons.arrow_forward_rounded,
                     size: 18,
-                    color: Color(0xFF555555),
+                    color: ApexColors.textMuted,
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              GoldHeading(value, fontSize: 21),
-              const SizedBox(height: 5),
+              SizedBox(height: compact ? 11 : 18),
+              GoldHeading(value, fontSize: compact ? 18 : 21),
+              SizedBox(height: compact ? 3 : 5),
               ApexText(
                 label,
-                fontSize: 12,
-                color: const Color(0xFFB8B8B8),
-                fontWeight: FontWeight.w600,
+                fontSize: compact ? 11.5 : 13,
+                color: ApexColors.textPrimary,
+                fontWeight: FontWeight.w700,
                 maxLines: 2,
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: compact ? 8 : 10),
               Wrap(
-                spacing: 6,
-                runSpacing: 4,
+                spacing: compact ? 6 : 10,
+                runSpacing: compact ? 5 : 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 7 : 8,
+                      vertical: compact ? 3 : 4,
                     ),
-                    decoration: BoxDecoration(
-                      color: detailColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                    decoration: ApexDecorations.badge(detailColor),
                     child: ApexText(
                       detail,
-                      fontSize: 10.5,
+                      fontSize: compact ? 9.5 : 11,
                       color: detailColor,
                       fontWeight: FontWeight.w700,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const ApexText(
-                    'Tap for details',
-                    fontSize: 10,
-                    color: Color(0xFF777777),
-                  ),
+                  if (!compact)
+                    const ApexText(
+                      'Details',
+                      fontSize: 11,
+                      color: ApexColors.textMuted,
+                    ),
                 ],
               ),
             ],
@@ -358,6 +513,7 @@ class _KpiCard extends StatelessWidget {
 
 enum _DashboardKpi {
   totalMembers,
+  activeMembers,
   activeSubscriptions,
   expiringSoon,
   todayCheckins,
@@ -367,70 +523,123 @@ enum _DashboardKpi {
   occupancy,
 }
 
-void _showKpiSheet(
+void _showKpiDetails(
   BuildContext context,
   _DashboardKpi kpi,
   DashboardSummary summary,
+  AsyncValue<List<AttendanceSession>> activeSessionsAsync,
 ) {
+  final content = _KpiDetailPanel(
+    kpi: kpi,
+    summary: summary,
+    activeSessionsAsync: activeSessionsAsync,
+  );
+
+  if (MediaQuery.of(context).size.width >= 900) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 860, maxHeight: 720),
+          child: content,
+        ),
+      ),
+    );
+    return;
+  }
+
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => _KpiDetailSheet(kpi: kpi, summary: summary),
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.72,
+      minChildSize: 0.42,
+      maxChildSize: 0.92,
+      builder: (context, controller) => _KpiDetailSheetFrame(
+        controller: controller,
+        child: content,
+      ),
+    ),
   );
 }
 
-class _KpiDetailSheet extends StatelessWidget {
-  const _KpiDetailSheet({
+class _KpiDetailSheetFrame extends StatelessWidget {
+  const _KpiDetailSheetFrame({
+    required this.controller,
+    required this.child,
+  });
+
+  final ScrollController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        border: Border(top: BorderSide(color: ApexColors.border)),
+      ),
+      child: PrimaryScrollController(
+        controller: controller,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _KpiDetailPanel extends StatelessWidget {
+  const _KpiDetailPanel({
     required this.kpi,
     required this.summary,
+    required this.activeSessionsAsync,
   });
 
   final _DashboardKpi kpi;
   final DashboardSummary summary;
+  final AsyncValue<List<AttendanceSession>> activeSessionsAsync;
 
   @override
   Widget build(BuildContext context) {
     final title = _title;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.58,
-      minChildSize: 0.35,
-      maxChildSize: 0.88,
-      builder: (context, controller) => Container(
-        decoration: const BoxDecoration(
-          color: cardDark,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          border: Border(top: BorderSide(color: borderDark)),
-        ),
-        child: ListView(
-          controller: controller,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF444444),
-                  borderRadius: BorderRadius.circular(99),
-                ),
+    return Container(
+      decoration: BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: BorderRadius.circular(ApexRadius.xl),
+        border: Border.all(color: ApexColors.border),
+      ),
+      child: ListView(
+        controller: PrimaryScrollController.maybeOf(context),
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: ApexColors.border,
+                borderRadius: BorderRadius.circular(ApexRadius.pill),
               ),
             ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(child: GoldHeading(title, fontSize: 18)),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  color: const Color(0xFF888888),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ..._content(context),
-          ],
-        ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(child: GoldHeading(title, fontSize: 19)),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+                color: ApexColors.textMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ApexText(_subtitle, fontSize: 13, color: ApexColors.textMuted),
+          const SizedBox(height: 18),
+          ..._content(context),
+        ],
       ),
     );
   }
@@ -439,6 +648,8 @@ class _KpiDetailSheet extends StatelessWidget {
     switch (kpi) {
       case _DashboardKpi.totalMembers:
         return 'Total Members';
+      case _DashboardKpi.activeMembers:
+        return 'Active Members';
       case _DashboardKpi.activeSubscriptions:
         return 'Active Subscriptions';
       case _DashboardKpi.expiringSoon:
@@ -456,6 +667,29 @@ class _KpiDetailSheet extends StatelessWidget {
     }
   }
 
+  String get _subtitle {
+    switch (kpi) {
+      case _DashboardKpi.totalMembers:
+        return 'Complete member directory snapshot from the current gym.';
+      case _DashboardKpi.activeMembers:
+        return 'Members marked active with an active account state.';
+      case _DashboardKpi.activeSubscriptions:
+        return 'Current active, partial, and expiring-soon subscriptions.';
+      case _DashboardKpi.expiringSoon:
+        return 'Subscriptions that need renewal attention soon.';
+      case _DashboardKpi.todayCheckins:
+        return 'Attendance records created today.';
+      case _DashboardKpi.todayRevenue:
+        return 'Paid and partial transactions recorded today.';
+      case _DashboardKpi.monthRevenue:
+        return 'Paid and partial transactions in the current month.';
+      case _DashboardKpi.expiredSubscriptions:
+        return 'Members affected by expired subscription records.';
+      case _DashboardKpi.occupancy:
+        return 'Current occupancy with live attendance sessions when available.';
+    }
+  }
+
   List<Widget> _content(BuildContext context) {
     switch (kpi) {
       case _DashboardKpi.totalMembers:
@@ -469,8 +703,36 @@ class _KpiDetailSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          _MemberList(
+            items: summary.memberItems,
+            emptyText: 'No members have been created yet.',
+          ),
+          const SizedBox(height: 14),
           _SheetButton(
             label: 'View Members',
+            icon: Icons.groups_2_rounded,
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.go('/members');
+            },
+          ),
+        ];
+      case _DashboardKpi.activeMembers:
+        return [
+          _SheetMetricGrid(
+            rows: [
+              _SheetMetric('Active', '${summary.activeMembers}'),
+              _SheetMetric('Total Members', '${summary.totalMembers}'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _MemberList(
+            items: summary.activeMemberItems,
+            emptyText: 'No active members found.',
+          ),
+          const SizedBox(height: 14),
+          _SheetButton(
+            label: 'Open Members',
             icon: Icons.groups_2_rounded,
             onPressed: () {
               Navigator.of(context).pop();
@@ -487,6 +749,11 @@ class _KpiDetailSheet extends StatelessWidget {
               _SheetMetric('Expiring Soon', '${summary.expiringSoonSubscriptions}'),
               _SheetMetric('Expired', '${summary.expiredSubscriptions}'),
             ],
+          ),
+          const SizedBox(height: 14),
+          _SubscriptionList(
+            items: summary.activeSubscriptionItems,
+            emptyText: 'No active subscriptions found.',
           ),
         ];
       case _DashboardKpi.expiringSoon:
@@ -563,6 +830,7 @@ class _KpiDetailSheet extends StatelessWidget {
           ),
         ];
       case _DashboardKpi.occupancy:
+        final sessions = activeSessionsAsync.valueOrNull ?? const <AttendanceSession>[];
         final capacity = summary.occupancyCapacity;
         final pct = capacity > 0
             ? (summary.occupancyCount / capacity * 100).clamp(0, 100).round()
@@ -580,13 +848,21 @@ class _KpiDetailSheet extends StatelessWidget {
               _SheetMetric('Current Count', '${summary.occupancyCount}'),
               _SheetMetric('Capacity', capacity > 0 ? '$capacity' : 'Not set'),
               _SheetMetric('Usage', capacity > 0 ? '$pct%' : '0%'),
+              _SheetMetric('Active Sessions', '${sessions.length}'),
               _SheetMetric('Status', label),
             ],
           ),
           const SizedBox(height: 12),
-          _CheckinList(
-            items: summary.recentCheckins,
-            emptyText: 'No recent check-ins.',
+          activeSessionsAsync.when(
+            data: (items) => _AttendanceSessionList(
+              items: items,
+              emptyText: 'No active attendance sessions right now.',
+            ),
+            loading: () => const ShimmerCard(),
+            error: (_, __) => _CheckinList(
+              items: summary.recentCheckins,
+              emptyText: 'No recent check-ins.',
+            ),
           ),
         ];
     }
@@ -610,10 +886,10 @@ class _SheetMetricGrid extends StatelessWidget {
                   ? (MediaQuery.of(context).size.width - 50) / 2
                   : 170,
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A0A0A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderDark),
+              decoration: ApexDecorations.card(
+                color: ApexColors.card,
+                borderColor: ApexColors.border,
+                radius: ApexRadius.md,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,14 +897,14 @@ class _SheetMetricGrid extends StatelessWidget {
                   ApexText(
                     row.label,
                     fontSize: 11,
-                    color: const Color(0xFF888888),
+                    color: ApexColors.textMuted,
                     maxLines: 2,
                   ),
                   const SizedBox(height: 6),
                   ApexText(
                     row.value,
                     fontSize: 17,
-                    color: const Color(0xFFE8E8E8),
+                    color: ApexColors.textPrimary,
                     fontWeight: FontWeight.w800,
                     maxLines: 2,
                   ),
@@ -666,6 +942,34 @@ class _SheetButton extends StatelessWidget {
       icon: Icon(icon, size: 17),
       label: Text(label),
       style: FilledButton.styleFrom(backgroundColor: gold),
+    );
+  }
+}
+
+class _MemberList extends StatelessWidget {
+  const _MemberList({
+    required this.items,
+    required this.emptyText,
+  });
+
+  final List<Member> items;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return _SheetEmpty(emptyText);
+    return Column(
+      children: items
+          .map(
+            (member) => _SheetRow(
+              icon: Icons.person_rounded,
+              title: member.name.isEmpty ? 'Unnamed member' : member.name,
+              subtitle:
+                  '${member.plan} - ${member.phone?.isNotEmpty == true ? member.phone : 'No phone'}',
+              trailing: member.status,
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -725,6 +1029,36 @@ class _TransactionList extends StatelessWidget {
   }
 }
 
+class _AttendanceSessionList extends StatelessWidget {
+  const _AttendanceSessionList({
+    required this.items,
+    required this.emptyText,
+  });
+
+  final List<AttendanceSession> items;
+  final String emptyText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return _SheetEmpty(emptyText);
+    return Column(
+      children: items
+          .map(
+            (session) => _SheetRow(
+              icon: Icons.sensor_occupied_rounded,
+              title: session.memberName.isEmpty
+                  ? 'Unknown member'
+                  : session.memberName,
+              subtitle:
+                  '${session.planName ?? 'No plan'} - checked in ${timeAgo(session.checkInAt)}',
+              trailing: session.checkInMethod,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 class _CheckinList extends StatelessWidget {
   const _CheckinList({
     required this.items,
@@ -770,10 +1104,10 @@ class _SheetRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderDark),
+      decoration: ApexDecorations.card(
+        color: ApexColors.card,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
       ),
       child: Row(
         children: [
@@ -785,7 +1119,7 @@ class _SheetRow extends StatelessWidget {
               children: [
                 ApexText(
                   title,
-                  color: const Color(0xFFE0E0E0),
+                  color: ApexColors.textPrimary,
                   fontWeight: FontWeight.w700,
                   maxLines: 2,
                 ),
@@ -793,7 +1127,7 @@ class _SheetRow extends StatelessWidget {
                 ApexText(
                   subtitle,
                   fontSize: 11,
-                  color: const Color(0xFF888888),
+                  color: ApexColors.textMuted,
                   maxLines: 2,
                 ),
               ],
@@ -804,7 +1138,7 @@ class _SheetRow extends StatelessWidget {
             child: ApexText(
               trailing,
               fontSize: 10,
-              color: const Color(0xFF777777),
+              color: ApexColors.textMuted,
               textAlign: TextAlign.right,
               maxLines: 2,
             ),
@@ -825,12 +1159,12 @@ class _SheetEmpty extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderDark),
+      decoration: ApexDecorations.card(
+        color: ApexColors.card,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
       ),
-      child: ApexText(text, color: const Color(0xFF888888)),
+      child: ApexText(text, color: ApexColors.textSecondary),
     );
   }
 }
@@ -847,14 +1181,18 @@ class _OccupancySection extends StatelessWidget {
     final percent = capacity > 0 ? (occupancy / capacity * 100) : 0.0;
 
     return ApexCard(
-      glow: true,
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Live Occupancy'),
-          const SizedBox(height: 20),
+          const _CardHeader(
+            icon: Icons.sensor_occupied_rounded,
+            title: 'Live Occupancy',
+            subtitle: 'Current floor usage',
+          ),
+          const SizedBox(height: 22),
           OccupancyRing(current: occupancy, capacity: capacity),
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
           Row(
             children: [
               _StatPill(
@@ -887,13 +1225,18 @@ class _RecentPayments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ApexCard(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Recent Payments / Receipts'),
-          const SizedBox(height: 14),
+          const _CardHeader(
+            icon: Icons.receipt_long_rounded,
+            title: 'Recent Payments',
+            subtitle: 'Latest receipts and payment status',
+          ),
+          const SizedBox(height: 16),
           if (summary.recentTransactions.isEmpty)
-            const ApexText('No payments recorded yet.', color: Color(0xFF555555))
+            const _InlineEmpty('No payments recorded yet.')
           else
             Column(
               children: summary.recentTransactions
@@ -902,6 +1245,82 @@ class _RecentPayments extends StatelessWidget {
                   .toList(),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _CardHeader extends StatelessWidget {
+  const _CardHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: ApexDecorations.badge(gold),
+          child: Icon(icon, color: gold, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ApexText(
+                title,
+                color: ApexColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+              const SizedBox(height: 3),
+              ApexText(
+                subtitle,
+                color: ApexColors.textMuted,
+                fontSize: 12,
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class _InlineEmpty extends StatelessWidget {
+  const _InlineEmpty(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: ApexSpacing.emptyState,
+      decoration: ApexDecorations.card(
+        color: ApexColors.surface,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
+      ),
+      child: Center(
+        child: ApexText(
+          text,
+          color: ApexColors.textMuted,
+          fontSize: 13,
+        ),
       ),
     );
   }
@@ -918,10 +1337,10 @@ class _PaymentRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderDark),
+      decoration: ApexDecorations.card(
+        color: ApexColors.surface,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
       ),
       child: Row(
         children: [
@@ -935,14 +1354,14 @@ class _PaymentRow extends StatelessWidget {
                   transaction.memberName.isEmpty
                       ? transaction.receiptNumber
                       : transaction.memberName,
-                  color: const Color(0xFFE2E2E2),
+                  color: ApexColors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
                 const SizedBox(height: 3),
                 ApexText(
                   '${transaction.receiptNumber} - ${_formatDateTime(transaction.date)}',
-                  fontSize: 10,
-                  color: const Color(0xFF666666),
+                  fontSize: 11,
+                  color: ApexColors.textMuted,
                 ),
               ],
             ),
@@ -976,19 +1395,19 @@ class _RecentCheckins extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ApexCard(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              GoldHeading('Recent Check-ins'),
-              Spacer(),
-              Icon(Icons.circle, color: greenSuccess, size: 7),
-            ],
+          const _CardHeader(
+            icon: Icons.login_rounded,
+            title: 'Recent Check-ins',
+            subtitle: 'Latest attendance activity',
+            trailing: Icon(Icons.circle, color: greenSuccess, size: 7),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           if (summary.recentCheckins.isEmpty)
-            const ApexText('No check-ins yet.', color: Color(0xFF555555))
+            const _InlineEmpty('No check-ins yet.')
           else
             Column(
               children: summary.recentCheckins
@@ -1001,9 +1420,9 @@ class _RecentCheckins extends StatelessWidget {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0A0A0A),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: borderDark),
+                        color: ApexColors.surface,
+                        borderRadius: BorderRadius.circular(ApexRadius.md),
+                        border: Border.all(color: ApexColors.border),
                       ),
                       child: Row(
                         children: [
@@ -1012,7 +1431,7 @@ class _RecentCheckins extends StatelessWidget {
                             height: 32,
                             decoration: BoxDecoration(
                               color: const Color(0xFF151515),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(ApexRadius.sm),
                             ),
                             child: Center(
                               child: ApexText(
@@ -1030,9 +1449,9 @@ class _RecentCheckins extends StatelessWidget {
                               children: [
                                 ApexText(
                                   ci.name.isEmpty ? 'Unknown member' : ci.name,
-                                  fontSize: 12,
-                                  color: const Color(0xFFCCCCCC),
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                  color: ApexColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 const SizedBox(height: 2),
                                 Row(
@@ -1049,8 +1468,8 @@ class _RecentCheckins extends StatelessWidget {
                                     Expanded(
                                       child: ApexText(
                                         ci.plan,
-                                        fontSize: 9,
-                                        color: const Color(0xFF444444),
+                                        fontSize: 11,
+                                        color: ApexColors.textMuted,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
@@ -1061,8 +1480,8 @@ class _RecentCheckins extends StatelessWidget {
                           ),
                           ApexText(
                             timeAgo(ci.time),
-                            fontSize: 10,
-                            color: const Color(0xFF444444),
+                            fontSize: 11,
+                            color: ApexColors.textMuted,
                           ),
                         ],
                       ),
@@ -1089,27 +1508,26 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0A0A0A),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderDark),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: ApexDecorations.card(
+        color: ApexColors.surface,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
+      ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ApexText(
               label,
-              fontSize: 9,
-              color: const Color(0xFF444444),
-              letterSpacing: 1,
+              fontSize: 11,
+              color: ApexColors.textMuted,
             ),
             const SizedBox(height: 4),
             ApexText(
               value,
               fontSize: 13,
-              color: const Color(0xFFCCCCCC),
-              fontWeight: FontWeight.w600,
+              color: ApexColors.textPrimary,
+              fontWeight: FontWeight.w700,
             ),
           ],
         ),
@@ -1162,6 +1580,7 @@ class _EmptyDashboardState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const ApexCard(
+      padding: ApexSpacing.emptyState,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1170,13 +1589,13 @@ class _EmptyDashboardState extends StatelessWidget {
           ApexText(
             'This gym has no members, subscriptions, receipts, or check-ins yet.',
             fontSize: 12,
-            color: Color(0xFF888888),
+            color: ApexColors.textSecondary,
           ),
           SizedBox(height: 8),
           ApexText(
             'Dashboard metrics update from gym-scoped Firestore data as operations happen.',
             fontSize: 11,
-            color: Color(0xFF555555),
+            color: ApexColors.textMuted,
           ),
         ],
       ),
@@ -1189,16 +1608,21 @@ class _DashboardLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(24),
-      child: Column(
-        children: [
-          ShimmerCard(),
-          SizedBox(height: 12),
-          ShimmerCard(),
-          SizedBox(height: 12),
-          ShimmerCard(),
-        ],
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1180),
+        child: const Padding(
+          padding: EdgeInsets.all(32),
+          child: Column(
+            children: [
+              ShimmerCard(),
+              SizedBox(height: 16),
+              ShimmerCard(),
+              SizedBox(height: 16),
+              ShimmerCard(),
+            ],
+          ),
+        ),
       ),
     );
   }

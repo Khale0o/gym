@@ -132,12 +132,13 @@ class DashboardRepository {
           (accountStatus == null ||
               accountStatus.isEmpty ||
               accountStatus == 'active');
-    }).length;
+    }).toList();
 
     var activeSubscriptions = 0;
     var expiredSubscriptions = 0;
     var expiringSoonSubscriptions = 0;
     var partialSubscriptions = 0;
+    final activeSubscriptionItems = <GymSubscription>[];
     final expiringSoonItems = <GymSubscription>[];
     final expiredItems = <GymSubscription>[];
 
@@ -156,6 +157,7 @@ class DashboardRepository {
           status == EffectiveSubscriptionStatus.expiringSoon ||
           status == EffectiveSubscriptionStatus.partial) {
         activeSubscriptions++;
+        activeSubscriptionItems.add(subscription);
       }
       if (status == EffectiveSubscriptionStatus.expiringSoon) {
         expiringSoonSubscriptions++;
@@ -201,7 +203,7 @@ class DashboardRepository {
 
     return DashboardSummary(
       totalMembers: data.members.length,
-      activeMembers: activeMembers,
+      activeMembers: activeMembers.length,
       activeSubscriptions: activeSubscriptions,
       expiredSubscriptions: expiredSubscriptions,
       expiringSoonSubscriptions: expiringSoonSubscriptions,
@@ -220,7 +222,16 @@ class DashboardRepository {
       todayTransactions: todayTransactions.take(10).toList(),
       monthTransactions: monthTransactions.take(10).toList(),
       todayCheckinItems: todayCheckinItems.take(10).toList(),
+      memberItems: _sortMembersByName(data.members),
+      activeMemberItems: _sortMembersByName(activeMembers),
+      activeSubscriptionItems:
+          _sortSubscriptionsByEndDate(activeSubscriptionItems).take(20).toList(),
     );
+  }
+
+  List<Member> _sortMembersByName(List<Member> members) {
+    return [...members]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
   List<GymSubscription> _sortSubscriptionsByEndDate(

@@ -23,6 +23,9 @@ class DashboardSummary {
     required this.todayTransactions,
     required this.monthTransactions,
     required this.todayCheckinItems,
+    required this.memberItems,
+    required this.activeMemberItems,
+    required this.activeSubscriptionItems,
   });
 
   final int totalMembers;
@@ -43,6 +46,9 @@ class DashboardSummary {
   final List<GymTransaction> todayTransactions;
   final List<GymTransaction> monthTransactions;
   final List<CheckIn> todayCheckinItems;
+  final List<Member> memberItems;
+  final List<Member> activeMemberItems;
+  final List<GymSubscription> activeSubscriptionItems;
 
   bool get isEmptyGym =>
       totalMembers == 0 &&
