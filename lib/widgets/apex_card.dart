@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gymsaas/core/theme.dart';
 
-/// Luxury dark card with optional gold glow and tap support.
+/// Standard dark card with optional brand glow and tap support.
 class ApexCard extends StatelessWidget {
   final Widget child;
   final bool glow;
@@ -25,19 +25,9 @@ class ApexCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: padding,
-        decoration: BoxDecoration(
-          color: cardDark,
-          borderRadius: BorderRadius.circular(borderRadius),
-          border: Border.all(color: borderDark),
-          boxShadow: glow
-              ? [
-                  BoxShadow(
-                    color: gold.withOpacity(0.12),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : null,
+        decoration: ApexDecorations.card(
+          radius: borderRadius,
+          glow: glow,
         ),
         child: child,
       ),

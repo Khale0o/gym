@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 
 /// Small pill badge with background tinted to the given color.
@@ -16,11 +17,7 @@ class ApexBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.25)),
-      ),
+      decoration: ApexDecorations.badge(color),
       child: ApexText(
         text,
         fontSize: 10,

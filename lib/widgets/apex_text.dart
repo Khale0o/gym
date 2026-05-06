@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:gymsaas/core/theme.dart';
 
 /// Universal text widget using DM Sans. Every text in the app should use this.
 class ApexText extends StatelessWidget {
@@ -16,7 +17,7 @@ class ApexText extends StatelessWidget {
     this.text, {
     super.key,
     this.fontSize = 13,
-    this.color = const Color(0xFF888888),
+    this.color = ApexColors.textSecondary,
     this.fontWeight = FontWeight.w400,
     this.textAlign,
     this.maxLines,
