@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/dashboard_summary.dart';
 import 'package:gymsaas/models/member.dart';
@@ -78,9 +79,9 @@ class _DashboardBody extends StatelessWidget {
                 children: [
                   _Header(gymId: gymId),
                   const SizedBox(height: 30),
-                  const _SectionHeader(
-                    title: 'Key Metrics',
-                    subtitle: 'Tap any card for records and operational detail.',
+                  _SectionHeader(
+                    title: context.t(L10nKeys.keyMetrics),
+                    subtitle: context.t(L10nKeys.dashboardSubtitle),
                   ),
                   const SizedBox(height: 14),
                   _KpiGrid(
@@ -94,9 +95,10 @@ class _DashboardBody extends StatelessWidget {
                     const _EmptyDashboardState(),
                     const SizedBox(height: 24),
                   ],
-                  const _SectionHeader(
-                    title: 'Operations',
-                    subtitle: 'Live occupancy, recent receipts, and attendance activity.',
+                  _SectionHeader(
+                    title: context.t(L10nKeys.operations),
+                    subtitle:
+                        '${context.t(L10nKeys.liveOccupancy)}, ${context.t(L10nKeys.recentPayments)}, ${context.t(L10nKeys.attendance)}.',
                   ),
                   const SizedBox(height: 14),
                   if (isMobile) ...[
@@ -141,11 +143,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final greeting = now.hour < 12
-        ? 'Good Morning'
-        : now.hour < 18
-            ? 'Good Afternoon'
-            : 'Good Evening';
 
     return Container(
       padding: const EdgeInsets.all(22),
@@ -159,10 +156,10 @@ class _Header extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GoldHeading('$greeting, Admin', fontSize: 22),
+                GoldHeading(context.t(L10nKeys.dashboard), fontSize: 22),
                 const SizedBox(height: 8),
                 ApexText(
-                  '${DateFormat('EEEE, d MMMM yyyy').format(now)} - $gymId',
+                  '${context.t(L10nKeys.dashboardSubtitle)} - ${DateFormat('EEEE, d MMMM yyyy').format(now)} - $gymId',
                   fontSize: 13,
                   color: ApexColors.textMuted,
                 ),
@@ -243,9 +240,9 @@ class _KpiGrid extends StatelessWidget {
     final cards = [
       _KpiCard(
         icon: Icons.people_rounded,
-        label: 'Total Members',
+        label: context.t(L10nKeys.totalMembers),
         value: '${summary.totalMembers}',
-        detail: '${summary.activeMembers} active',
+        detail: '${summary.activeMembers} ${context.t(L10nKeys.active)}',
         accent: blueInfo,
         good: true,
         compact: compact,
@@ -258,9 +255,10 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.how_to_reg_rounded,
-        label: 'Active Members',
+        label: context.t(L10nKeys.activeMembers),
         value: '${summary.activeMembers}',
-        detail: '${inactiveMembers < 0 ? 0 : inactiveMembers} inactive',
+        detail:
+            '${inactiveMembers < 0 ? 0 : inactiveMembers} ${context.t(L10nKeys.inactive)}',
         accent: greenSuccess,
         good: true,
         compact: compact,
@@ -273,7 +271,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.verified_rounded,
-        label: 'Active Subscriptions',
+        label: context.t(L10nKeys.activeSubscriptions),
         value: '${summary.activeSubscriptions}',
         detail: '${summary.expiredSubscriptions} expired',
         accent: greenSuccess,
@@ -288,7 +286,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.warning_amber_rounded,
-        label: 'Expiring Soon',
+        label: context.t(L10nKeys.expiringSoon),
         value: '${summary.expiringSoonSubscriptions}',
         detail: 'Next 7 days',
         accent: orangeWarning,
@@ -303,7 +301,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.login_rounded,
-        label: 'Today Check-ins',
+        label: context.t(L10nKeys.todayCheckins),
         value: '${summary.todayCheckins}',
         detail: 'Since midnight',
         accent: blueInfo,
@@ -318,7 +316,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.payments_rounded,
-        label: 'Today Revenue',
+        label: context.t(L10nKeys.todayRevenue),
         value: _money(summary.todayRevenue),
         detail: 'Paid/partial',
         accent: gold,
@@ -333,7 +331,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.calendar_month_rounded,
-        label: 'Month Revenue',
+        label: context.t(L10nKeys.monthRevenue),
         value: _money(summary.monthRevenue),
         detail: 'Current month',
         accent: greenSuccess,
@@ -348,7 +346,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.cancel_rounded,
-        label: 'Expired Subscriptions',
+        label: context.t(L10nKeys.expiredSubscriptions),
         value: '${summary.expiredSubscriptions}',
         detail: 'End date passed',
         accent: redAlert,
@@ -363,7 +361,7 @@ class _KpiGrid extends StatelessWidget {
       ),
       _KpiCard(
         icon: Icons.sensor_occupied_rounded,
-        label: 'Current Occupancy',
+        label: context.t(L10nKeys.currentOccupancy),
         value: '${summary.occupancyCount}',
         detail: summary.occupancyCapacity > 0
             ? '/ ${summary.occupancyCapacity}'
@@ -496,8 +494,8 @@ class _KpiCard extends StatelessWidget {
                     ),
                   ),
                   if (!compact)
-                    const ApexText(
-                      'Details',
+                    ApexText(
+                      context.t(L10nKeys.details),
                       fontSize: 11,
                       color: ApexColors.textMuted,
                     ),
@@ -603,7 +601,7 @@ class _KpiDetailPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = _title;
+    final title = _title(context);
     return Container(
       decoration: BoxDecoration(
         color: ApexColors.surface,
@@ -636,7 +634,7 @@ class _KpiDetailPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          ApexText(_subtitle, fontSize: 13, color: ApexColors.textMuted),
+          ApexText(_subtitle(context), fontSize: 13, color: ApexColors.textMuted),
           const SizedBox(height: 18),
           ..._content(context),
         ],
@@ -644,30 +642,30 @@ class _KpiDetailPanel extends StatelessWidget {
     );
   }
 
-  String get _title {
+  String _title(BuildContext context) {
     switch (kpi) {
       case _DashboardKpi.totalMembers:
-        return 'Total Members';
+        return context.t(L10nKeys.totalMembers);
       case _DashboardKpi.activeMembers:
-        return 'Active Members';
+        return context.t(L10nKeys.activeMembers);
       case _DashboardKpi.activeSubscriptions:
-        return 'Active Subscriptions';
+        return context.t(L10nKeys.activeSubscriptions);
       case _DashboardKpi.expiringSoon:
-        return 'Expiring Soon';
+        return context.t(L10nKeys.expiringSoon);
       case _DashboardKpi.todayCheckins:
-        return 'Today Check-ins';
+        return context.t(L10nKeys.todayCheckins);
       case _DashboardKpi.todayRevenue:
-        return 'Today Revenue';
+        return context.t(L10nKeys.todayRevenue);
       case _DashboardKpi.monthRevenue:
-        return 'Month Revenue';
+        return context.t(L10nKeys.monthRevenue);
       case _DashboardKpi.expiredSubscriptions:
-        return 'Expired Subscriptions';
+        return context.t(L10nKeys.expiredSubscriptions);
       case _DashboardKpi.occupancy:
-        return 'Current Occupancy';
+        return context.t(L10nKeys.currentOccupancy);
     }
   }
 
-  String get _subtitle {
+  String _subtitle(BuildContext context) {
     switch (kpi) {
       case _DashboardKpi.totalMembers:
         return 'Complete member directory snapshot from the current gym.';
@@ -697,19 +695,19 @@ class _KpiDetailPanel extends StatelessWidget {
         return [
           _SheetMetricGrid(
             rows: [
-              _SheetMetric('Total', '${summary.totalMembers}'),
-              _SheetMetric('Active', '${summary.activeMembers}'),
-              _SheetMetric('Inactive', '${inactive < 0 ? 0 : inactive}'),
+              _SheetMetric(context.t(L10nKeys.totalMembers), '${summary.totalMembers}'),
+              _SheetMetric(context.t(L10nKeys.active), '${summary.activeMembers}'),
+              _SheetMetric(context.t(L10nKeys.inactive), '${inactive < 0 ? 0 : inactive}'),
             ],
           ),
           const SizedBox(height: 14),
           _MemberList(
             items: summary.memberItems,
-            emptyText: 'No members have been created yet.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
           const SizedBox(height: 14),
           _SheetButton(
-            label: 'View Members',
+            label: context.t(L10nKeys.members),
             icon: Icons.groups_2_rounded,
             onPressed: () {
               Navigator.of(context).pop();
@@ -721,18 +719,18 @@ class _KpiDetailPanel extends StatelessWidget {
         return [
           _SheetMetricGrid(
             rows: [
-              _SheetMetric('Active', '${summary.activeMembers}'),
-              _SheetMetric('Total Members', '${summary.totalMembers}'),
+              _SheetMetric(context.t(L10nKeys.active), '${summary.activeMembers}'),
+              _SheetMetric(context.t(L10nKeys.totalMembers), '${summary.totalMembers}'),
             ],
           ),
           const SizedBox(height: 14),
           _MemberList(
             items: summary.activeMemberItems,
-            emptyText: 'No active members found.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
           const SizedBox(height: 14),
           _SheetButton(
-            label: 'Open Members',
+            label: context.t(L10nKeys.members),
             icon: Icons.groups_2_rounded,
             onPressed: () {
               Navigator.of(context).pop();
@@ -744,31 +742,31 @@ class _KpiDetailPanel extends StatelessWidget {
         return [
           _SheetMetricGrid(
             rows: [
-              _SheetMetric('Active', '${summary.activeSubscriptions}'),
-              _SheetMetric('Partial', '${summary.partialSubscriptions}'),
-              _SheetMetric('Expiring Soon', '${summary.expiringSoonSubscriptions}'),
-              _SheetMetric('Expired', '${summary.expiredSubscriptions}'),
+              _SheetMetric(context.t(L10nKeys.active), '${summary.activeSubscriptions}'),
+              _SheetMetric(context.t(L10nKeys.partial), '${summary.partialSubscriptions}'),
+              _SheetMetric(context.t(L10nKeys.expiringSoon), '${summary.expiringSoonSubscriptions}'),
+              _SheetMetric(context.t(L10nKeys.expiredSubscriptions), '${summary.expiredSubscriptions}'),
             ],
           ),
           const SizedBox(height: 14),
           _SubscriptionList(
             items: summary.activeSubscriptionItems,
-            emptyText: 'No active subscriptions found.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
         ];
       case _DashboardKpi.expiringSoon:
         return [
           _SheetMetricGrid(
-            rows: [_SheetMetric('Expiring Soon', '${summary.expiringSoonSubscriptions}')],
+            rows: [_SheetMetric(context.t(L10nKeys.expiringSoon), '${summary.expiringSoonSubscriptions}')],
           ),
           const SizedBox(height: 12),
           _SubscriptionList(
             items: summary.expiringSoonItems,
-            emptyText: 'No subscriptions are expiring soon.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
           const SizedBox(height: 12),
           _SheetButton(
-            label: 'Open Payments / Renew',
+            label: context.t(L10nKeys.recordPaymentRenew),
             icon: Icons.receipt_long_rounded,
             onPressed: () {
               Navigator.of(context).pop();
@@ -779,54 +777,54 @@ class _KpiDetailPanel extends StatelessWidget {
       case _DashboardKpi.todayCheckins:
         return [
           _SheetMetricGrid(
-            rows: [_SheetMetric('Today', '${summary.todayCheckins}')],
+            rows: [_SheetMetric(context.t(L10nKeys.today), '${summary.todayCheckins}')],
           ),
           const SizedBox(height: 12),
           _CheckinList(
             items: summary.todayCheckinItems,
-            emptyText: 'No check-ins today.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
         ];
       case _DashboardKpi.todayRevenue:
         return [
           _SheetMetricGrid(
-            rows: [_SheetMetric('Today Revenue', _money(summary.todayRevenue))],
+            rows: [_SheetMetric(context.t(L10nKeys.todayRevenue), _money(summary.todayRevenue))],
           ),
           const SizedBox(height: 12),
           _TransactionList(
             items: summary.todayTransactions,
-            emptyText: 'No paid or partial transactions today.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
         ];
       case _DashboardKpi.monthRevenue:
         return [
           _SheetMetricGrid(
             rows: [
-              _SheetMetric('Month Revenue', _money(summary.monthRevenue)),
-              _SheetMetric('Transactions', '${summary.monthTransactions.length}'),
+              _SheetMetric(context.t(L10nKeys.monthRevenue), _money(summary.monthRevenue)),
+              _SheetMetric(context.t(L10nKeys.payments), '${summary.monthTransactions.length}'),
             ],
           ),
           const SizedBox(height: 10),
-          const ApexText(
-            'Includes paid and partial transactions from the current month.',
+          ApexText(
+            context.t(L10nKeys.thisMonth),
             color: Color(0xFF999999),
             fontSize: 12,
           ),
           const SizedBox(height: 12),
           _TransactionList(
             items: summary.monthTransactions,
-            emptyText: 'No paid or partial transactions this month.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
         ];
       case _DashboardKpi.expiredSubscriptions:
         return [
           _SheetMetricGrid(
-            rows: [_SheetMetric('Expired', '${summary.expiredSubscriptions}')],
+            rows: [_SheetMetric(context.t(L10nKeys.expiredSubscriptions), '${summary.expiredSubscriptions}')],
           ),
           const SizedBox(height: 12),
           _SubscriptionList(
             items: summary.expiredItems,
-            emptyText: 'No expired subscriptions.',
+            emptyText: context.t(L10nKeys.noRecordsFound),
           ),
         ];
       case _DashboardKpi.occupancy:
@@ -836,32 +834,32 @@ class _KpiDetailPanel extends StatelessWidget {
             ? (summary.occupancyCount / capacity * 100).clamp(0, 100).round()
             : 0;
         final label = capacity <= 0
-            ? 'Capacity not set'
+            ? context.t(L10nKeys.notSet)
             : pct >= 90
-                ? 'High'
+                ? context.t(L10nKeys.busy)
                 : pct >= 70
-                    ? 'Busy'
-                    : 'Comfortable';
+                    ? context.t(L10nKeys.moderate)
+                    : context.t(L10nKeys.low);
         return [
           _SheetMetricGrid(
             rows: [
-              _SheetMetric('Current Count', '${summary.occupancyCount}'),
-              _SheetMetric('Capacity', capacity > 0 ? '$capacity' : 'Not set'),
-              _SheetMetric('Usage', capacity > 0 ? '$pct%' : '0%'),
-              _SheetMetric('Active Sessions', '${sessions.length}'),
-              _SheetMetric('Status', label),
+              _SheetMetric(context.t(L10nKeys.currentCount), '${summary.occupancyCount}'),
+              _SheetMetric(context.t(L10nKeys.capacity), capacity > 0 ? '$capacity' : context.t(L10nKeys.notSet)),
+              _SheetMetric(context.t(L10nKeys.usage), capacity > 0 ? '$pct%' : '0%'),
+              _SheetMetric(context.t(L10nKeys.activeSessions), '${sessions.length}'),
+              _SheetMetric(context.t(L10nKeys.status), label),
             ],
           ),
           const SizedBox(height: 12),
           activeSessionsAsync.when(
             data: (items) => _AttendanceSessionList(
               items: items,
-              emptyText: 'No active attendance sessions right now.',
+              emptyText: context.t(L10nKeys.noActiveSessions),
             ),
             loading: () => const ShimmerCard(),
             error: (_, __) => _CheckinList(
               items: summary.recentCheckins,
-              emptyText: 'No recent check-ins.',
+              emptyText: context.t(L10nKeys.noRecentCheckins),
             ),
           ),
         ];
@@ -1185,9 +1183,9 @@ class _OccupancySection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardHeader(
+          _CardHeader(
             icon: Icons.sensor_occupied_rounded,
-            title: 'Live Occupancy',
+            title: context.t(L10nKeys.liveOccupancy),
             subtitle: 'Current floor usage',
           ),
           const SizedBox(height: 22),
@@ -1196,17 +1194,17 @@ class _OccupancySection extends StatelessWidget {
           Row(
             children: [
               _StatPill(
-                label: 'Count',
+                label: context.t(L10nKeys.count),
                 value: '${summary.occupancyCount}',
               ),
               const SizedBox(width: 12),
               _StatPill(
-                label: 'Capacity',
+                label: context.t(L10nKeys.capacity),
                 value: capacity > 0 ? '$capacity' : 'Not set',
               ),
               const SizedBox(width: 12),
               _StatPill(
-                label: 'Usage',
+                label: context.t(L10nKeys.usage),
                 value: capacity > 0 ? '${percent.round()}%' : '0%',
               ),
             ],
@@ -1229,9 +1227,9 @@ class _RecentPayments extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardHeader(
+          _CardHeader(
             icon: Icons.receipt_long_rounded,
-            title: 'Recent Payments',
+            title: context.t(L10nKeys.recentPayments),
             subtitle: 'Latest receipts and payment status',
           ),
           const SizedBox(height: 16),
@@ -1399,9 +1397,9 @@ class _RecentCheckins extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardHeader(
+          _CardHeader(
             icon: Icons.login_rounded,
-            title: 'Recent Check-ins',
+            title: context.t(L10nKeys.recentCheckins),
             subtitle: 'Latest attendance activity',
             trailing: Icon(Icons.circle, color: greenSuccess, size: 7),
           ),
@@ -1579,20 +1577,20 @@ class _EmptyDashboardState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ApexCard(
+    return ApexCard(
       padding: ApexSpacing.emptyState,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GoldHeading('No Gym Data Yet'),
-          SizedBox(height: 10),
+          GoldHeading(context.t(L10nKeys.noGymDataYet)),
+          const SizedBox(height: 10),
           ApexText(
             'This gym has no members, subscriptions, receipts, or check-ins yet.',
             fontSize: 12,
             color: ApexColors.textSecondary,
           ),
-          SizedBox(height: 8),
-          ApexText(
+          const SizedBox(height: 8),
+          const ApexText(
             'Dashboard metrics update from gym-scoped Firestore data as operations happen.',
             fontSize: 11,
             color: ApexColors.textMuted,

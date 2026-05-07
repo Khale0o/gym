@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/navigation/admin_shell.dart';
 import 'package:gymsaas/navigation/role_access.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
+import 'package:gymsaas/providers/tenant_access_provider.dart';
 import 'package:gymsaas/screens/access/access_error_screen.dart';
 import 'package:gymsaas/screens/ai/ai_engine_screen.dart';
 import 'package:gymsaas/screens/checkin/checkin_screen.dart';
@@ -14,12 +15,14 @@ import 'package:gymsaas/screens/members/member_detail_screen.dart';
 import 'package:gymsaas/screens/members/members_screen.dart';
 import 'package:gymsaas/screens/payments/payments_screen.dart';
 import 'package:gymsaas/screens/plans/plans_screen.dart';
+import 'package:gymsaas/screens/platform/platform_admin_screen.dart';
 import 'package:gymsaas/screens/settings/gym_settings_screen.dart';
 import 'package:gymsaas/screens/staff/staff_management_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   ref.watch(authStateProvider);
   ref.watch(currentUserProfileProvider);
+  ref.watch(currentGymTenantAccessProvider);
   final user = ref.watch(firebaseAuthProvider).currentUser;
 
   return GoRouter(
@@ -56,10 +59,24 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final profile = profileAsync.valueOrNull;
       final issue = accessIssueForProfile(profile);
+      final tenantAccessAsync = ref.read(currentGymTenantAccessProvider);
+      final tenantIssue = tenantAccessAsync.valueOrNull?.blockedMessage;
 
       if (issue != null) {
         if (!isAccessError) return accessErrorRoute;
         return null;
+      }
+
+      if (!isPlatformOwnerRole(profile?.role)) {
+        if (tenantAccessAsync.isLoading) return null;
+        if (tenantAccessAsync.hasError) {
+          if (!isAccessError) return accessErrorRoute;
+          return null;
+        }
+        if (tenantIssue != null) {
+          if (!isAccessError) return accessErrorRoute;
+          return null;
+        }
       }
 
       if (isAccessError) {
@@ -91,11 +108,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             final profileAsync = ref.watch(currentUserProfileProvider);
             final profile = profileAsync.valueOrNull;
             final issue = accessIssueForProfile(profile);
+            final tenantAccessAsync = ref.watch(currentGymTenantAccessProvider);
+            final tenantIssue = tenantAccessAsync.valueOrNull?.blockedMessage;
             return AccessErrorScreen(
               title: 'Access Unavailable',
               message: profileAsync.hasError
                   ? 'Your profile could not be loaded. Please sign out and try again.'
                   : issue ??
+                  (tenantAccessAsync.hasError
+                      ? 'Your gym access could not be checked. Please sign out and try again.'
+                      : null) ??
+                  tenantIssue ??
                   'Your account does not currently have access to this part of the app.',
             );
           },
@@ -150,6 +173,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/ai',
             builder: (_, __) => const AiEngineScreen(),
+          ),
+          GoRoute(
+            path: platformRoute,
+            builder: (_, __) => const PlatformAdminScreen(),
           ),
         ],
       ),

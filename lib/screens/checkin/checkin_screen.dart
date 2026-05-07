@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/attendance_session.dart';
+import 'package:gymsaas/models/checkin.dart';
 import 'package:gymsaas/models/member_access_eligibility.dart';
 import 'package:gymsaas/models/member.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
@@ -39,6 +41,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   bool _success = false;
   String? _scannedName;
   String? _scannedPlan;
+  String? _scannedMethod;
+  DateTime? _scannedAt;
 
   late AnimationController _scanCtrl;
   late Animation<double> _scanAnim;
@@ -95,6 +99,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       _success = false;
       _scannedName = null;
       _scannedPlan = null;
+      _scannedMethod = null;
+      _scannedAt = null;
     });
 
     await Future.delayed(const Duration(milliseconds: 1800));
@@ -126,6 +132,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
           _success = true;
           _scannedName = admission.memberName;
           _scannedPlan = admission.planName;
+          _scannedMethod = 'NFC';
+          _scannedAt = DateTime.now();
         });
       } on StateError catch (error) {
         _showError(_stateErrorMessage(error));
@@ -171,6 +179,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       _success = false;
       _scannedName = null;
       _scannedPlan = null;
+      _scannedMethod = null;
+      _scannedAt = null;
     });
 
     try {
@@ -187,11 +197,12 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
         throw StateError(accessMessage);
       }
 
+      final accessMethod = _accessMethodFor(member, code);
       final admission =
           await ref.read(checkInRepositoryProvider).checkInMemberWithSession(
             gymId: gymId,
             memberId: member.id,
-            method: _accessMethodFor(member, code),
+            method: accessMethod,
             createdBy: ref.read(currentAuthUserProvider)?.uid,
           );
       if (!mounted) return;
@@ -199,6 +210,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
         _success = true;
         _scannedName = admission.memberName;
         _scannedPlan = admission.planName;
+        _scannedMethod = accessMethod;
+        _scannedAt = DateTime.now();
       });
       _accessCodeController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -315,13 +328,17 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
 
     return Scaffold(
       backgroundColor: bgDark,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1280),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const GoldHeading('Check-in Station', fontSize: 18),
-            const SizedBox(height: 24),
+            _CheckInHeader(occupancyAsync: occupancyAsync),
+            const SizedBox(height: 20),
 
             /// ✅ RESPONSIVE WRAPPER
             LayoutBuilder(
@@ -336,8 +353,6 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                       _buildNFC(),
                       const SizedBox(height: 16),
                       _buildOccupancy(occupancyAsync),
-                      const SizedBox(height: 16),
-                      _buildStats(),
                     ],
                   );
                 }
@@ -346,19 +361,24 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 2, child: _buildNFC()),
-                    const SizedBox(width: 16),
+                    Expanded(flex: 6, child: _buildNFC()),
+                    const SizedBox(width: 18),
                     Expanded(
-                        flex: 2,
-                        child: _buildOccupancy(occupancyAsync)),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 3, child: _buildStats()),
+                      flex: 4,
+                      child: Column(
+                        children: [
+                          _buildOccupancy(occupancyAsync),
+                          const SizedBox(height: 16),
+                          _ActiveSessionsSummary(async: activeSessionsAsync),
+                        ],
+                      ),
+                    ),
                   ],
                 );
               },
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             _ActiveSessionsCard(
               async: activeSessionsAsync,
@@ -366,95 +386,13 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
               onCheckOut: _checkOutMember,
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            /// ACCESS LOG (FULL ORIGINAL)
-            ApexCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const GoldHeading('Live Access Log'),
-                  const SizedBox(height: 16),
-                  checkinsAsync.when(
-                    loading: () => Column(
-                      children: List.generate(
-                        4,
-                        (_) => const Padding(
-                          padding: EdgeInsets.only(bottom: 8),
-                          child: ShimmerCard(),
-                        ),
-                      ),
-                    ),
-                    error: (error, _) => ApexText(
-                      friendlyFirestoreErrorMessage(error),
-                      color: orangeWarning,
-                    ),
-                    data: (list) => Column(
-                      children: list.take(8).toList().asMap().entries.map((e) {
-                        final i = e.key;
-                        final ci = e.value;
-
-                        return AnimatedContainer(
-                          duration: Duration(milliseconds: 300 + i * 50),
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 9),
-                          decoration: BoxDecoration(
-                            color: i == 0
-                                ? greenSuccess.withOpacity(0.05)
-                                : const Color(0xFF0A0A0A),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: i == 0
-                                  ? greenSuccess.withOpacity(0.2)
-                                  : borderDark,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                ci.method == 'NFC'
-                                    ? Icons.nfc_rounded
-                                    : ci.method == 'QR'
-                                        ? Icons.qr_code_rounded
-                                        : Icons.edit_rounded,
-                                color: i == 0
-                                    ? greenSuccess
-                                    : const Color(0xFF444444),
-                                size: 16,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: ApexText(
-                                  ci.name,
-                                  fontSize: 12,
-                                  color: i == 0
-                                      ? const Color(0xFFDDDDDD)
-                                      : const Color(0xFF888888),
-                                  fontWeight: i == 0
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                ),
-                              ),
-                              ApexBadge(
-                                  text: ci.method,
-                                  color: ci.method == 'NFC'
-                                      ? blueInfo
-                                      : ci.method == 'QR'
-                                          ? greenSuccess
-                                          : orangeWarning),
-                              const SizedBox(width: 10),
-                              ApexText(timeAgo(ci.time), fontSize: 10, color: const Color(0xFF444444)),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
+            _RecentAccessLog(async: checkinsAsync),
+          ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -466,8 +404,14 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       glow: _scanning || _checkingIn,
       child: Column(
         children: [
-          const GoldHeading('Access Check-in'),
-          const SizedBox(height: 24),
+          const GoldHeading('Access Check-in', fontSize: 18),
+          const SizedBox(height: 6),
+          ApexText(
+            context.t(L10nKeys.scanAccessCode),
+            color: ApexColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+          const SizedBox(height: 18),
           GestureDetector(
             onTap: _simulateScan,
             child: AnimatedBuilder(
@@ -482,15 +426,15 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: _scanning
-                            ? gold.withOpacity(
-                                0.3 + 0.4 * _scanAnim.value)
+                            ? gold.withValues(
+                                alpha: 0.3 + 0.4 * _scanAnim.value)
                             : borderDark,
                         width: 2,
                       ),
                       color: _success
-                          ? greenSuccess.withOpacity(0.08)
+                          ? greenSuccess.withValues(alpha: 0.08)
                           : _scanning
-                              ? gold.withOpacity(0.05)
+                              ? gold.withValues(alpha: 0.05)
                               : cardDark,
                     ),
                   ),
@@ -504,7 +448,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                           gradient: LinearGradient(
                             colors: [
                               Colors.transparent,
-                              gold.withOpacity(0.8),
+                              gold.withValues(alpha: 0.8),
                               Colors.transparent,
                             ],
                           ),
@@ -532,7 +476,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
             enabled: !_checkingIn && !_scanning,
             style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 13),
             decoration: InputDecoration(
-              labelText: 'Scan NFC / QR / Access Code',
+              hintText: context.t(L10nKeys.scanAccessCode),
               labelStyle: const TextStyle(
                 color: Color(0xFF777777),
                 fontSize: 12,
@@ -543,21 +487,21 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                 size: 18,
               ),
               filled: true,
-              fillColor: card2Dark,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: borderDark),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: borderDark),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: gold),
-              ),
+              fillColor: ApexColors.surface,
+              border: ApexDecorations.inputBorder(),
+              enabledBorder: ApexDecorations.inputBorder(),
+              focusedBorder: ApexDecorations.inputBorder(gold),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             ),
             onSubmitted: (_) => _checkInByAccessCode(),
+          ),
+          const SizedBox(height: 8),
+          const ApexText(
+            'Hardware scanners that type into this field will work automatically.',
+            fontSize: 11,
+            color: ApexColors.textMuted,
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -575,7 +519,9 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                     )
                   : const Icon(Icons.login_rounded, size: 18),
               label: ApexText(
-                _checkingIn ? 'Checking' : 'Check In',
+                _checkingIn
+                    ? context.t(L10nKeys.loading)
+                    : context.t(L10nKeys.checkIn),
                 fontSize: 12,
                 color: const Color(0xFF080808),
                 fontWeight: FontWeight.w700,
@@ -596,9 +542,9 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: greenSuccess.withOpacity(0.08),
+                color: greenSuccess.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: greenSuccess.withOpacity(0.2)),
+                border: Border.all(color: greenSuccess.withValues(alpha: 0.2)),
               ),
               child: Column(
                 children: [
@@ -613,6 +559,26 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
                       fontWeight: FontWeight.w700),
                   const SizedBox(height: 4),
                   ApexBadge(text: _scannedPlan ?? '', color: gold),
+                  if (_scannedAt != null || _scannedMethod != null) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        if (_scannedAt != null)
+                          ApexBadge(
+                            text: _timeLabel(_scannedAt!),
+                            color: greenSuccess,
+                          ),
+                        if (_scannedMethod != null)
+                          ApexBadge(
+                            text: _scannedMethod!,
+                            color: _methodColor(_scannedMethod!),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -620,7 +586,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
             ApexText(
               _checkingIn || _scanning
                   ? 'Validating access...'
-                  : 'Tap scanner circle for demo/test random check-in',
+                  : 'Ready for front-desk check-in.',
               fontSize: 12,
               color: _checkingIn || _scanning ? gold : const Color(0xFF555555),
             ),
@@ -639,15 +605,38 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       ),
       data: (occupancyCount) {
         final pct = (occupancyCount / gymCapacity * 100).clamp(0.0, 100.0);
+        final status = _occupancyStatus(occupancyCount);
         return ApexCard(
           child: Column(
             children: [
-              const GoldHeading('Live Occupancy'),
+              GoldHeading(context.t(L10nKeys.liveOccupancy), fontSize: 16),
               const SizedBox(height: 16),
               OccupancyRing(
                 current: occupancyCount,
                 capacity: gymCapacity,
                 compact: true,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  ApexBadge(
+                    text:
+                        '${occupancyCount.round()} ${context.t(L10nKeys.currentCount)}',
+                    color: ocColor(pct),
+                  ),
+                  ApexBadge(
+                    text: '$gymCapacity ${context.t(L10nKeys.capacity)}',
+                    color: blueInfo,
+                  ),
+                  ApexBadge(
+                    text: _occupancyStatusLabel(context, status),
+                    color: status.color,
+                  ),
+                  ApexBadge(text: '${pct.round()}%', color: ocColor(pct)),
+                ],
               ),
               const SizedBox(height: 16),
               // أزرار التحكم
@@ -687,7 +676,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
   }
 
   /// 🔴 STATS — FULL ORIGINAL WITH METHOD BARS & SECURITY ALERTS
-  Widget _buildStats() {
+  Widget buildStats() {
     return Column(
       children: [
         ApexCard(
@@ -723,6 +712,206 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
 }
 
 // ─── الأدوات الصغيرة (بالكامل) ────────────────────────
+class _CheckInHeader extends StatelessWidget {
+  const _CheckInHeader({required this.occupancyAsync});
+
+  final AsyncValue<double> occupancyAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
+    return ApexCard(
+      glow: true,
+      padding: const EdgeInsets.all(20),
+      child: Wrap(
+        spacing: 18,
+        runSpacing: 14,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: isMobile ? double.infinity : 620,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GoldHeading(context.t(L10nKeys.checkInTitle), fontSize: 22),
+                const SizedBox(height: 6),
+                ApexText(
+                  context.t(L10nKeys.checkInSubtitle),
+                  color: ApexColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+          occupancyAsync.maybeWhen(
+            data: (occupancyCount) {
+              final status = _occupancyStatus(occupancyCount);
+              final pct =
+                  (occupancyCount / gymCapacity * 100).clamp(0.0, 100.0);
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ApexBadge(
+                    text:
+                        '${occupancyCount.round()} / $gymCapacity ${context.t(L10nKeys.currentlyInside)}',
+                    color: ocColor(pct),
+                  ),
+                  ApexBadge(
+                    text: _occupancyStatusLabel(context, status),
+                    color: status.color,
+                  ),
+                ],
+              );
+            },
+            orElse: () => ApexBadge(
+              text: context.t(L10nKeys.loading),
+              color: gold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActiveSessionsSummary extends StatelessWidget {
+  const _ActiveSessionsSummary({required this.async});
+
+  final AsyncValue<List<AttendanceSession>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: async.when(
+        loading: () => const ShimmerCard(),
+        error: (error, _) => ApexText(
+          friendlyFirestoreErrorMessage(error),
+          color: orangeWarning,
+        ),
+        data: (sessions) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              GoldHeading(context.t(L10nKeys.activeSessions), fontSize: 14),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ApexBadge(
+                  text: '${sessions.length} ${context.t(L10nKeys.active)}',
+                  color: sessions.isEmpty ? ApexColors.textMuted : greenSuccess,
+                ),
+                ApexBadge(
+                  text: sessions.isEmpty
+                      ? context.t(L10nKeys.noActiveSessions)
+                      : context.t(L10nKeys.liveOccupancy),
+                  color: sessions.isEmpty ? blueInfo : gold,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentAccessLog extends StatelessWidget {
+  const _RecentAccessLog({required this.async});
+
+  final AsyncValue<List<CheckIn>> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GoldHeading(context.t(L10nKeys.recentCheckins), fontSize: 16),
+          const SizedBox(height: 6),
+          const ApexText(
+            'Legacy access log, kept as a lower-priority operational reference.',
+            fontSize: 12,
+            color: ApexColors.textSecondary,
+          ),
+          const SizedBox(height: 14),
+          async.when(
+            loading: () => Column(
+              children: List.generate(
+                4,
+                (_) => const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: ShimmerCard(),
+                ),
+              ),
+            ),
+            error: (error, _) => ApexText(
+              friendlyFirestoreErrorMessage(error),
+              color: orangeWarning,
+            ),
+            data: (list) {
+              if (list.isEmpty) {
+                return ApexText(
+                  context.t(L10nKeys.noRecentCheckins),
+                  color: ApexColors.textMuted,
+                );
+              }
+              return Column(
+                children: list.take(8).toList().asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final ci = entry.value;
+                  final method = ci.method;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: i == 0
+                          ? greenSuccess.withValues(alpha: 0.06)
+                          : ApexColors.surface,
+                      borderRadius: ApexRadius.card,
+                      border: Border.all(
+                        color: i == 0
+                            ? greenSuccess.withValues(alpha: 0.22)
+                            : ApexColors.border,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(_methodIcon(method),
+                            color: _methodColor(method), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ApexText(
+                            ci.name,
+                            color: ApexColors.textPrimary,
+                            fontWeight:
+                                i == 0 ? FontWeight.w700 : FontWeight.w500,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        ApexBadge(text: method, color: _methodColor(method)),
+                        const SizedBox(width: 10),
+                        ApexText(
+                          timeAgo(ci.time),
+                          fontSize: 10,
+                          color: ApexColors.textMuted,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OccBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -763,7 +952,13 @@ class _ActiveSessionsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Active Sessions'),
+          GoldHeading(context.t(L10nKeys.activeSessions), fontSize: 18),
+          const SizedBox(height: 6),
+          const ApexText(
+            'Members currently inside the gym.',
+            fontSize: 12,
+            color: ApexColors.textSecondary,
+          ),
           const SizedBox(height: 16),
           async.when(
             loading: () => Column(
@@ -782,10 +977,9 @@ class _ActiveSessionsCard extends StatelessWidget {
             ),
             data: (sessions) {
               if (sessions.isEmpty) {
-                return const ApexText(
-                  'No members are currently checked in.',
-                  color: Color(0xFF555555),
-                  fontSize: 12,
+                return _EmptyOperationalState(
+                  icon: Icons.event_available_rounded,
+                  text: context.t(L10nKeys.noActiveSessions),
                 );
               }
 
@@ -802,6 +996,38 @@ class _ActiveSessionsCard extends StatelessWidget {
                     .toList(),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyOperationalState extends StatelessWidget {
+  const _EmptyOperationalState({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: ApexColors.textMuted, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ApexText(text, color: ApexColors.textSecondary),
           ),
         ],
       ),
@@ -830,9 +1056,9 @@ class _ActiveSessionRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderDark),
+        color: ApexColors.surface,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
       ),
       child: isMobile
           ? Column(
@@ -842,6 +1068,8 @@ class _ActiveSessionRow extends StatelessWidget {
                   session: session,
                   durationLabel: durationLabel,
                 ),
+                const SizedBox(height: 10),
+                _ActiveSessionBadges(session: session),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
@@ -860,6 +1088,7 @@ class _ActiveSessionRow extends StatelessWidget {
                     durationLabel: durationLabel,
                   ),
                 ),
+                _ActiveSessionBadges(session: session),
                 const SizedBox(width: 12),
                 _CheckOutButton(
                   checkingOut: checkingOut,
@@ -923,6 +1152,32 @@ class _ActiveSessionInfo extends StatelessWidget {
   }
 }
 
+class _ActiveSessionBadges extends StatelessWidget {
+  const _ActiveSessionBadges({required this.session});
+
+  final AttendanceSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = (session.memberPhone ?? '').trim();
+    final plan = (session.planName ?? '').trim();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ApexBadge(text: context.t(L10nKeys.active), color: greenSuccess),
+        ApexBadge(
+          text: session.checkInMethod,
+          color: _methodColor(session.checkInMethod),
+        ),
+        if (phone.isNotEmpty) ApexBadge(text: phone, color: blueInfo),
+        if (plan.isNotEmpty) ApexBadge(text: plan, color: ApexColors.secondary),
+      ],
+    );
+  }
+}
+
 class _CheckOutButton extends StatelessWidget {
   const _CheckOutButton({
     required this.checkingOut,
@@ -946,7 +1201,9 @@ class _CheckOutButton extends StatelessWidget {
               ),
             )
           : const Icon(Icons.logout_rounded, size: 16),
-      label: Text(checkingOut ? 'Checking out' : 'Check Out'),
+      label: Text(
+        checkingOut ? context.t(L10nKeys.loading) : context.t(L10nKeys.checkOut),
+      ),
       style: FilledButton.styleFrom(
         backgroundColor: gold,
         foregroundColor: const Color(0xFF080808),
@@ -1018,7 +1275,7 @@ class _AlertRow extends StatelessWidget {
             width: 22,
             height: 22,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -1029,4 +1286,73 @@ class _AlertRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _OccupancyStatus {
+  const _OccupancyStatus(this.label, this.color);
+
+  final String label;
+  final Color color;
+}
+
+_OccupancyStatus _occupancyStatus(double count) {
+  if (count <= 0) return const _OccupancyStatus('Empty', ApexColors.textMuted);
+  final pct = count / gymCapacity * 100;
+  if (pct < 35) return const _OccupancyStatus('Low', greenSuccess);
+  if (pct < 70) return const _OccupancyStatus('Moderate', gold);
+  if (pct < 100) return const _OccupancyStatus('Busy', orangeWarning);
+  return const _OccupancyStatus('Full', redAlert);
+}
+
+String _occupancyStatusLabel(BuildContext context, _OccupancyStatus status) {
+  switch (status.label) {
+    case 'Empty':
+      return context.t(L10nKeys.empty);
+    case 'Low':
+      return context.t(L10nKeys.low);
+    case 'Moderate':
+      return context.t(L10nKeys.moderate);
+    case 'Busy':
+      return context.t(L10nKeys.busy);
+    case 'Full':
+      return context.t(L10nKeys.full);
+    default:
+      return status.label;
+  }
+}
+
+Color _methodColor(String method) {
+  switch (method.trim().toLowerCase()) {
+    case 'nfc':
+      return blueInfo;
+    case 'qr':
+    case 'qr code':
+      return greenSuccess;
+    case 'access code':
+      return gold;
+    case 'manual':
+      return orangeWarning;
+    default:
+      return ApexColors.secondary;
+  }
+}
+
+IconData _methodIcon(String method) {
+  switch (method.trim().toLowerCase()) {
+    case 'nfc':
+      return Icons.nfc_rounded;
+    case 'qr':
+    case 'qr code':
+      return Icons.qr_code_rounded;
+    case 'access code':
+      return Icons.password_rounded;
+    default:
+      return Icons.edit_rounded;
+  }
+}
+
+String _timeLabel(DateTime value) {
+  final hour = value.hour.toString().padLeft(2, '0');
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }

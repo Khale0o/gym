@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/gym_settings.dart';
 import 'package:gymsaas/navigation/role_capabilities.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/gym_scoped_providers.dart';
+import 'package:gymsaas/providers/language_provider.dart';
 import 'package:gymsaas/repositories/gym_settings_repository.dart';
 import 'package:gymsaas/widgets/apex_card.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
@@ -46,13 +48,15 @@ class GymSettingsScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const GoldHeading('Settings', fontSize: 20),
+              GoldHeading(context.t(L10nKeys.settings), fontSize: 20),
               const SizedBox(height: 6),
-              const ApexText(
-                'Manage production gym configuration.',
+              ApexText(
+                context.t(L10nKeys.settingsSubtitle),
                 color: Color(0xFF777777),
               ),
               const SizedBox(height: 20),
+              const _LanguageSettingsCard(),
+              const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final isNarrow = constraints.maxWidth < 900;
@@ -115,6 +119,64 @@ class GymSettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LanguageSettingsCard extends ConsumerWidget {
+  const _LanguageSettingsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final language = ref.watch(appLanguageProvider);
+
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GoldHeading(context.t(L10nKeys.language), fontSize: 16),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ChoiceChip(
+                label: Text(context.t(L10nKeys.english)),
+                selected: language == AppLanguage.english,
+                onSelected: (_) => _changeLanguage(
+                  context,
+                  ref,
+                  AppLanguage.english,
+                ),
+              ),
+              ChoiceChip(
+                label: Text(context.t(L10nKeys.arabicEgyptian)),
+                selected: language == AppLanguage.arabicEgyptian,
+                onSelected: (_) => _changeLanguage(
+                  context,
+                  ref,
+                  AppLanguage.arabicEgyptian,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changeLanguage(
+    BuildContext context,
+    WidgetRef ref,
+    AppLanguage language,
+  ) async {
+    await ref.read(appLanguageProvider.notifier).setLanguage(language);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(context.t(L10nKeys.languageChanged)),
+        backgroundColor: greenSuccess,
       ),
     );
   }
@@ -239,27 +301,31 @@ class _GymProfileCardState extends ConsumerState<_GymProfileCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Gym Profile', fontSize: 16),
+          GoldHeading(context.t(L10nKeys.gymProfile), fontSize: 16),
           const SizedBox(height: 14),
-          _SettingsField(controller: _name, label: 'Name'),
-          _SettingsField(controller: _slug, label: 'Slug'),
+          _SettingsField(controller: _name, label: context.t(L10nKeys.name)),
+          _SettingsField(controller: _slug, label: context.t(L10nKeys.slug)),
           _SettingsWrap(
             children: [
-              _SettingsField(controller: _country, label: 'Country'),
-              _SettingsField(controller: _currency, label: 'Currency'),
-              _SettingsField(controller: _timezone, label: 'Timezone'),
-              _SettingsField(controller: _status, label: 'Status'),
+              _SettingsField(controller: _country, label: context.t(L10nKeys.country)),
+              _SettingsField(controller: _currency, label: context.t(L10nKeys.currency)),
+              _SettingsField(controller: _timezone, label: context.t(L10nKeys.timezone)),
+              _SettingsField(controller: _status, label: context.t(L10nKeys.status)),
             ],
           ),
           _SettingsWrap(
             children: [
-              _SettingsField(controller: _phone, label: 'Phone'),
-              _SettingsField(controller: _email, label: 'Email'),
+              _SettingsField(controller: _phone, label: context.t(L10nKeys.phone)),
+              _SettingsField(controller: _email, label: context.t(L10nKeys.email)),
             ],
           ),
-          _SettingsField(controller: _address, label: 'Address', maxLines: 2),
+          _SettingsField(controller: _address, label: context.t(L10nKeys.address), maxLines: 2),
           _SettingsField(controller: _logoUrl, label: 'Logo URL optional'),
-          _SaveButton(saving: _saving, label: 'Save Profile', onPressed: _save),
+          _SaveButton(
+            saving: _saving,
+            label: context.t(L10nKeys.saveProfile),
+            onPressed: _save,
+          ),
         ],
       ),
     );
@@ -340,12 +406,12 @@ class _OccupancySettingsCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Occupancy Settings', fontSize: 16),
+          GoldHeading(context.t(L10nKeys.occupancySettings), fontSize: 16),
           const SizedBox(height: 14),
           _ReadOnlyRow(label: 'Current count', value: '${widget.settings.count}'),
           _SettingsField(
             controller: _capacity,
-            label: 'Capacity',
+            label: context.t(L10nKeys.capacity),
             keyboardType: TextInputType.number,
           ),
           const ApexText(
@@ -353,7 +419,11 @@ class _OccupancySettingsCardState
             color: Color(0xFF777777),
             fontSize: 12,
           ),
-          _SaveButton(saving: _saving, label: 'Save Occupancy', onPressed: _save),
+          _SaveButton(
+            saving: _saving,
+            label: context.t(L10nKeys.saveOccupancy),
+            onPressed: _save,
+          ),
         ],
       ),
     );
@@ -460,7 +530,7 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Business Settings', fontSize: 16),
+          GoldHeading(context.t(L10nKeys.businessSettings), fontSize: 16),
           const SizedBox(height: 14),
           _SwitchRow(
             title: 'Allow partial payments',
@@ -487,7 +557,7 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
             ],
           ),
           const SizedBox(height: 8),
-          const GoldHeading('Payment Methods', fontSize: 13),
+          GoldHeading(context.t(L10nKeys.paymentMethods), fontSize: 13),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -517,7 +587,11 @@ class _AppSettingsCardState extends ConsumerState<_AppSettingsCard> {
               );
             }).toList(),
           ),
-          _SaveButton(saving: _saving, label: 'Save Business Settings', onPressed: _save),
+          _SaveButton(
+            saving: _saving,
+            label: context.t(L10nKeys.saveBusinessSettings),
+            onPressed: _save,
+          ),
         ],
       ),
     );
@@ -670,7 +744,7 @@ class _SaveButton extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.save_rounded, size: 18),
-        label: Text(saving ? 'Saving' : label),
+        label: Text(saving ? context.t(L10nKeys.saving) : label),
         style: FilledButton.styleFrom(backgroundColor: gold),
       ),
     );

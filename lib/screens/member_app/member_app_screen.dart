@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
 import 'package:gymsaas/models/gym_settings.dart';
@@ -69,13 +70,13 @@ class _MemberAppScreenState extends ConsumerState<MemberAppScreen> {
           final linkedMemberId = profile?.linkedMemberId?.trim() ?? '';
 
           if (profile == null || gymId.isEmpty) {
-            return const _FullScreenMessage(
-              'Your gym profile is incomplete. Please contact the gym.',
+            return _FullScreenMessage(
+              context.t(L10nKeys.memberProfileIncomplete),
             );
           }
           if (linkedMemberId.isEmpty) {
-            return const _FullScreenMessage(
-              'Your member profile is not linked yet. Please contact the gym.',
+            return _FullScreenMessage(
+              context.t(L10nKeys.memberProfileNotLinked),
             );
           }
 
@@ -96,8 +97,8 @@ class _MemberAppScreenState extends ConsumerState<MemberAppScreen> {
             ),
             data: (member) {
               if (member == null) {
-                return const _FullScreenMessage(
-                  'Member profile not found. Please contact the gym.',
+                return _FullScreenMessage(
+                  context.t(L10nKeys.memberProfileNotFound),
                 );
               }
 
@@ -200,28 +201,28 @@ class _BottomNav extends StatelessWidget {
         children: [
           _AppNavItem(
             icon: Icons.home_rounded,
-            label: 'Home',
+            label: context.t(L10nKeys.home),
             index: 0,
             current: current,
             onTap: onChanged,
           ),
           _AppNavItem(
             icon: Icons.login_rounded,
-            label: 'Visits',
+            label: context.t(L10nKeys.attendance),
             index: 1,
             current: current,
             onTap: onChanged,
           ),
           _AppNavItem(
             icon: Icons.receipt_long_rounded,
-            label: 'Payments',
+            label: context.t(L10nKeys.payments),
             index: 2,
             current: current,
             onTap: onChanged,
           ),
           _AppNavItem(
             icon: Icons.qr_code_rounded,
-            label: 'Access',
+            label: context.t(L10nKeys.access),
             index: 3,
             current: current,
             onTap: onChanged,
@@ -291,7 +292,7 @@ class _MemberHomeTab extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const ApexText('Welcome back,', fontSize: 11),
+                  ApexText(context.t(L10nKeys.memberAppTitle), fontSize: 11),
                   GoldHeading(member.fullName, fontSize: 16),
                   const SizedBox(height: 6),
                   ApexText(
@@ -481,7 +482,7 @@ class _AttendanceTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PhoneScroll(
       children: [
-        const GoldHeading('Attendance History', fontSize: 16),
+        GoldHeading(context.t(L10nKeys.checkInTitle), fontSize: 16),
         const SizedBox(height: 12),
         async.when(
           loading: () => const _InlineLoading(),
@@ -550,7 +551,7 @@ class _PaymentsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PhoneScroll(
       children: [
-        const GoldHeading('Receipts', fontSize: 16),
+        GoldHeading(context.t(L10nKeys.payments), fontSize: 16),
         const SizedBox(height: 12),
         async.when(
           loading: () => const _InlineLoading(),
@@ -558,7 +559,7 @@ class _PaymentsTab extends StatelessWidget {
           data: (transactions) {
             final rows = transactions.take(10).toList();
             if (rows.isEmpty) {
-              return const _EmptyState('No payments yet.');
+              return _EmptyState(context.t(L10nKeys.noPaymentsYet));
             }
             return Column(
               children: rows.map((tx) => _PaymentRow(tx: tx)).toList(),
@@ -632,7 +633,7 @@ class _AccessTab extends StatelessWidget {
 
     return _PhoneScroll(
       children: [
-        const GoldHeading('Digital Membership Card', fontSize: 16),
+        GoldHeading(context.t(L10nKeys.memberAppTitle), fontSize: 16),
         const SizedBox(height: 12),
         _DigitalCard(
           gymName: gymName,
@@ -644,7 +645,9 @@ class _AccessTab extends StatelessWidget {
         _InfoCard(
           title: 'Card Details',
           trailing: ApexBadge(
-            text: eligibility.allowed ? 'Access Allowed' : 'Access Blocked',
+            text: eligibility.allowed
+                ? context.t(L10nKeys.accessAllowed)
+                : context.t(L10nKeys.accessBlocked),
             color: eligibility.allowed ? greenSuccess : redAlert,
           ),
           children: [
@@ -718,7 +721,9 @@ class _DigitalCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           ApexBadge(
-            text: eligibility.allowed ? 'Access Allowed' : 'Access Blocked',
+            text: eligibility.allowed
+                ? context.t(L10nKeys.accessAllowed)
+                : context.t(L10nKeys.accessBlocked),
             color: statusColor,
           ),
           if (eligibility.severity == MemberAccessSeverity.warning) ...[
@@ -783,8 +788,8 @@ class _NoQrMessage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderDark),
       ),
-      child: const ApexText(
-        'No access credential assigned yet. Please contact the gym.',
+      child: ApexText(
+        context.t(L10nKeys.noAccessCredential),
         fontSize: 12,
         color: orangeWarning,
         textAlign: TextAlign.center,

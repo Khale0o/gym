@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
 import 'package:gymsaas/models/gym_settings.dart';
 import 'package:gymsaas/models/member.dart';
@@ -80,62 +81,73 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     return Scaffold(
       backgroundColor: bgDark,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const GoldHeading('Payments', fontSize: 18),
-              const SizedBox(height: 20),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 900;
-                  final form = _PaymentForm(
-                    membersAsync: membersAsync,
-                    plansAsync: plansAsync,
-                    selectedMember: _selectedMember,
-                    selectedPlan: _selectedPlan,
-                    amountController: _amountController,
-                    notesController: _notesController,
-                    paymentMethod: _paymentMethod,
-                    paymentStatus: _paymentStatus,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1280),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PaymentsHeader(
                     enabledPaymentMethods: enabledPaymentMethods,
-                    saving: _saving,
-                    onMemberChanged: _onMemberChanged,
-                    onPlanChanged: _onPlanChanged,
-                    onMethodChanged: (value) => setState(
-                      () => _paymentMethod =
-                          value ?? TransactionPaymentMethod.unknown,
-                    ),
-                    onStatusChanged: (value) => setState(
-                      () => _paymentStatus =
-                          value ?? TransactionPaymentStatus.paid,
-                    ),
-                    onSave: _savePayment,
-                  );
-                  final list = _TransactionsList(async: transactionsAsync);
+                    selectedPlan: _selectedPlan,
+                  ),
+                  const SizedBox(height: 20),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isNarrow = constraints.maxWidth < 900;
+                      final form = _PaymentForm(
+                        membersAsync: membersAsync,
+                        plansAsync: plansAsync,
+                        selectedMember: _selectedMember,
+                        selectedPlan: _selectedPlan,
+                        amountController: _amountController,
+                        notesController: _notesController,
+                        paymentMethod: _paymentMethod,
+                        paymentStatus: _paymentStatus,
+                        enabledPaymentMethods: enabledPaymentMethods,
+                        saving: _saving,
+                        onMemberChanged: _onMemberChanged,
+                        onPlanChanged: _onPlanChanged,
+                        onMethodChanged: (value) => setState(
+                          () => _paymentMethod =
+                              value ?? TransactionPaymentMethod.unknown,
+                        ),
+                        onStatusChanged: (value) => setState(
+                          () => _paymentStatus =
+                              value ?? TransactionPaymentStatus.paid,
+                        ),
+                        onSave: _savePayment,
+                      );
+                      final list = _TransactionsList(
+                        async: transactionsAsync,
+                        selectedMember: _selectedMember,
+                      );
 
-                  if (isNarrow) {
-                    return Column(
-                      children: [
-                        form,
-                        const SizedBox(height: 16),
-                        list,
-                      ],
-                    );
-                  }
+                      if (isNarrow) {
+                        return Column(
+                          children: [
+                            form,
+                            const SizedBox(height: 16),
+                            list,
+                          ],
+                        );
+                      }
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 4, child: form),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 5, child: list),
-                    ],
-                  );
-                },
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 6, child: form),
+                          const SizedBox(width: 18),
+                          Expanded(flex: 4, child: list),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -325,6 +337,60 @@ String _paymentMethodLabel(String method) {
   }
 }
 
+class _PaymentsHeader extends StatelessWidget {
+  const _PaymentsHeader({
+    required this.enabledPaymentMethods,
+    required this.selectedPlan,
+  });
+
+  final List<String> enabledPaymentMethods;
+  final MembershipPlan? selectedPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = selectedPlan?.currency ?? 'EGP';
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
+    return ApexCard(
+      glow: true,
+      padding: const EdgeInsets.all(20),
+      child: Wrap(
+        spacing: 18,
+        runSpacing: 14,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: isMobile ? double.infinity : 560,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GoldHeading(context.t(L10nKeys.paymentsTitle), fontSize: 22),
+                const SizedBox(height: 6),
+                ApexText(
+                  context.t(L10nKeys.paymentsSubtitle),
+                  color: ApexColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ApexBadge(text: currency, color: blueInfo),
+              ApexBadge(
+                text: '${enabledPaymentMethods.length} methods enabled',
+                color: gold,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PaymentForm extends ConsumerWidget {
   const _PaymentForm({
     required this.membersAsync,
@@ -367,137 +433,199 @@ class _PaymentForm extends ConsumerWidget {
         : ref.watch(memberSubscriptionsProvider(selectedMember!.id));
 
     return ApexCard(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Record Payment'),
-          const SizedBox(height: 16),
-          membersAsync.when(
-            loading: () => const ShimmerCard(),
-            error: (error, _) => ApexText(
-              'Members unavailable: $error',
-              color: redAlert,
-            ),
-            data: (members) => DropdownButtonFormField<String>(
-              initialValue: selectedMember?.id,
-              dropdownColor: card2Dark,
-              iconEnabledColor: gold,
-              decoration: _decoration('Member'),
-              items: members
-                  .map(
-                    (member) => DropdownMenuItem(
-                      value: member.id,
-                      child: Text(member.fullName),
-                    ),
-                  )
-                  .toList(),
-              onChanged: saving
-                  ? null
-                  : (value) {
-                      final member = value == null
+          const GoldHeading('Record Renewal Payment', fontSize: 18),
+          const SizedBox(height: 6),
+          const ApexText(
+            'Work through the renewal in order: member, plan, then payment details.',
+            color: ApexColors.textSecondary,
+          ),
+          const SizedBox(height: 18),
+          _PaymentSection(
+            number: 'A',
+            title: context.t(L10nKeys.selectMember),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                membersAsync.when(
+                  loading: () => const ShimmerCard(),
+                  error: (error, _) => ApexText(
+                    'Members unavailable: $error',
+                    color: redAlert,
+                  ),
+                  data: (members) {
+                    if (members.isEmpty) {
+                      return const _PaymentEmptyState(
+                        icon: Icons.groups_2_rounded,
+                        text: 'No members found.',
+                      );
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: selectedMember?.id,
+                      dropdownColor: card2Dark,
+                      iconEnabledColor: gold,
+                      isExpanded: true,
+                      decoration: _decoration('Member'),
+                      items: members
+                          .map(
+                            (member) => DropdownMenuItem(
+                              value: member.id,
+                              child: Text(
+                                member.fullName,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: saving
                           ? null
-                          : members.firstWhere((m) => m.id == value);
-                      onMemberChanged(member);
-                    },
+                          : (value) {
+                              final member = value == null
+                                  ? null
+                                  : members.firstWhere((m) => m.id == value);
+                              onMemberChanged(member);
+                            },
+                    );
+                  },
+                ),
+                _SelectedMemberStatus(member: selectedMember),
+              ],
             ),
           ),
-          _SelectedMemberStatus(member: selectedMember),
-          const SizedBox(height: 12),
-          plansAsync.when(
-            loading: () => const ShimmerCard(),
-            error: (error, _) => ApexText(
-              'Plans unavailable: $error',
-              color: orangeWarning,
+          const SizedBox(height: 14),
+          _PaymentSection(
+            number: 'B',
+            title: context.t(L10nKeys.selectPlan),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                plansAsync.when(
+                  loading: () => const ShimmerCard(),
+                  error: (error, _) => ApexText(
+                    'Plans unavailable: $error',
+                    color: orangeWarning,
+                  ),
+                  data: (plans) {
+                    if (plans.isEmpty) {
+                      return const _PaymentEmptyState(
+                        icon: Icons.inventory_2_rounded,
+                        text: 'No active plans are available.',
+                      );
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: selectedPlan?.id,
+                      dropdownColor: card2Dark,
+                      iconEnabledColor: gold,
+                      isExpanded: true,
+                      decoration: _decoration(context.t(L10nKeys.currentPlan)),
+                      items: plans
+                          .map(
+                            (plan) => DropdownMenuItem(
+                              value: plan.id,
+                              child: Text(
+                                '${plan.name} - ${plan.price.toStringAsFixed(0)} ${plan.currency}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: saving
+                          ? null
+                          : (value) {
+                              final plan = value == null
+                                  ? null
+                                  : plans.firstWhere((p) => p.id == value);
+                              onPlanChanged(plan);
+                            },
+                    );
+                  },
+                ),
+                _SelectedPlanSummary(plan: selectedPlan),
+                _RenewalHint(
+                  selectedMember: selectedMember,
+                  selectedPlan: selectedPlan,
+                  subscriptionsAsync: subscriptionsAsync,
+                ),
+              ],
             ),
-            data: (plans) => DropdownButtonFormField<String>(
-              initialValue: selectedPlan?.id,
-              dropdownColor: card2Dark,
-              iconEnabledColor: gold,
-              decoration: _decoration('Active plan'),
-              items: plans
-                  .map(
-                    (plan) => DropdownMenuItem(
-                      value: plan.id,
-                      child: Text(
-                        '${plan.name} - ${plan.price.toStringAsFixed(0)} ${plan.currency}',
+          ),
+          const SizedBox(height: 14),
+          _PaymentSection(
+            number: 'C',
+            title: context.t(L10nKeys.paymentDetails),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: amountController,
+                  enabled: !saving,
+                  keyboardType: TextInputType.number,
+                  decoration: _decoration('Amount'),
+                  style: const TextStyle(color: Color(0xFFE8E8E8)),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: enabledPaymentMethods.contains(paymentMethod)
+                            ? paymentMethod
+                            : null,
+                        dropdownColor: card2Dark,
+                        iconEnabledColor: gold,
+                        decoration: _decoration('Payment method'),
+                        items: enabledPaymentMethods
+                            .map(
+                              (method) => DropdownMenuItem(
+                                value: method,
+                                child: Text(_paymentMethodLabel(method)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: saving ? null : onMethodChanged,
                       ),
                     ),
-                  )
-                  .toList(),
-              onChanged: saving
-                  ? null
-                  : (value) {
-                      final plan = value == null
-                          ? null
-                          : plans.firstWhere((p) => p.id == value);
-                      onPlanChanged(plan);
-                    },
+                    SizedBox(
+                      width: 180,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: paymentStatus,
+                        dropdownColor: card2Dark,
+                        iconEnabledColor: gold,
+                        decoration: _decoration('Payment status'),
+                        items: const [
+                          DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                          DropdownMenuItem(
+                            value: 'partial',
+                            child: Text('Partial'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'unpaid',
+                            child: Text('Unpaid'),
+                          ),
+                        ],
+                        onChanged: saving ? null : onStatusChanged,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: notesController,
+                  enabled: !saving,
+                  maxLines: 3,
+                  decoration: _decoration('Notes optional'),
+                  style: const TextStyle(color: Color(0xFFE8E8E8)),
+                ),
+              ],
             ),
           ),
-          _RenewalHint(
-            selectedMember: selectedMember,
-            selectedPlan: selectedPlan,
-            subscriptionsAsync: subscriptionsAsync,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: amountController,
-            enabled: !saving,
-            keyboardType: TextInputType.number,
-            decoration: _decoration('Amount'),
-            style: const TextStyle(color: Color(0xFFE8E8E8)),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String>(
-                  initialValue: enabledPaymentMethods.contains(paymentMethod)
-                      ? paymentMethod
-                      : null,
-                  dropdownColor: card2Dark,
-                  iconEnabledColor: gold,
-                  decoration: _decoration('Payment method'),
-                  items: enabledPaymentMethods
-                      .map(
-                        (method) => DropdownMenuItem(
-                          value: method,
-                          child: Text(_paymentMethodLabel(method)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: saving ? null : onMethodChanged,
-                ),
-              ),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  initialValue: paymentStatus,
-                  dropdownColor: card2Dark,
-                  iconEnabledColor: gold,
-                  decoration: _decoration('Payment status'),
-                  items: const [
-                    DropdownMenuItem(value: 'paid', child: Text('Paid')),
-                    DropdownMenuItem(value: 'partial', child: Text('Partial')),
-                    DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
-                  ],
-                  onChanged: saving ? null : onStatusChanged,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: notesController,
-            enabled: !saving,
-            maxLines: 3,
-            decoration: _decoration('Notes optional'),
-            style: const TextStyle(color: Color(0xFFE8E8E8)),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton.icon(
@@ -509,7 +637,7 @@ class _PaymentForm extends ConsumerWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.receipt_long_rounded, size: 18),
-              label: const Text('Record Payment'),
+              label: Text(context.t(L10nKeys.createPayment)),
               style: FilledButton.styleFrom(backgroundColor: gold),
             ),
           ),
@@ -521,16 +649,90 @@ class _PaymentForm extends ConsumerWidget {
   InputDecoration _decoration(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Color(0xFF777777)),
+      labelStyle: const TextStyle(color: ApexColors.textMuted, fontSize: 12),
       filled: true,
-      fillColor: const Color(0xFF090909),
-      enabledBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: borderDark),
-        borderRadius: BorderRadius.circular(10),
+      fillColor: ApexColors.surface,
+      enabledBorder: ApexDecorations.inputBorder(),
+      border: ApexDecorations.inputBorder(),
+      focusedBorder: ApexDecorations.inputBorder(gold),
+    );
+  }
+}
+
+class _PaymentSection extends StatelessWidget {
+  const _PaymentSection({
+    required this.number,
+    required this.title,
+    required this.child,
+  });
+
+  final String number;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: gold),
-        borderRadius: BorderRadius.circular(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 13,
+                backgroundColor: gold.withValues(alpha: 0.14),
+                child: ApexText(
+                  number,
+                  fontSize: 11,
+                  color: gold,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 9),
+              GoldHeading(title, fontSize: 14),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentEmptyState extends StatelessWidget {
+  const _PaymentEmptyState({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: ApexColors.card,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: ApexColors.textMuted, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ApexText(text, color: ApexColors.textSecondary),
+          ),
+        ],
       ),
     );
   }
@@ -550,19 +752,146 @@ class _SelectedMemberStatus extends StatelessWidget {
     final planName = (value.currentPlanName ?? '').trim().isEmpty
         ? 'No current plan'
         : value.currentPlanName!.trim();
+    final phone = (value.phone ?? '').trim().isEmpty
+        ? 'No phone'
+        : value.phone!.trim();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          ApexBadge(text: state.label, color: state.color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ApexText(
-              '$planName - ${state.description}',
-              fontSize: 11,
-              color: const Color(0xFF777777),
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: ApexColors.card,
+          borderRadius: ApexRadius.card,
+          border: Border.all(color: ApexColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ApexBadge(text: state.label, color: state.color),
+                if ((value.paymentStatus ?? '').trim().isNotEmpty)
+                  ApexBadge(
+                    text: value.paymentStatus!,
+                    color: _paymentStatusColor(value.paymentStatus!),
+                  ),
+              ],
             ),
+            const SizedBox(height: 10),
+            ApexText(
+              value.fullName,
+              color: ApexColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+            const SizedBox(height: 4),
+            ApexText(
+              phone,
+              fontSize: 12,
+              color: ApexColors.textSecondary,
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 18,
+              runSpacing: 8,
+              children: [
+                _SummaryLine(label: 'Current plan', value: planName),
+                _SummaryLine(
+                  label: 'Ends',
+                  value: _formatDate(value.subscriptionEndDate),
+                ),
+                _SummaryLine(label: 'Status', value: state.description),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedPlanSummary extends StatelessWidget {
+  const _SelectedPlanSummary({required this.plan});
+
+  final MembershipPlan? plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = plan;
+    if (value == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: _PaymentEmptyState(
+          icon: Icons.assignment_rounded,
+          text: 'Select a plan to continue.',
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: ApexColors.card,
+          borderRadius: ApexRadius.card,
+          border: Border.all(color: ApexColors.border),
+        ),
+        child: Wrap(
+          spacing: 18,
+          runSpacing: 8,
+          children: [
+            _SummaryLine(label: 'Plan', value: value.name),
+            _SummaryLine(
+              label: 'Price',
+              value: '${value.price.toStringAsFixed(0)} ${value.currency}',
+            ),
+            _SummaryLine(label: 'Duration', value: '${value.durationDays} days'),
+            _SummaryLine(
+              label: 'Status',
+              value: value.isActive
+                  ? context.t(L10nKeys.active)
+                  : context.t(L10nKeys.inactive),
+            ),
+            if ((value.description ?? '').trim().isNotEmpty)
+              _SummaryLine(label: 'Note', value: value.description!.trim()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width < 700 ? double.infinity : 170,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ApexText(label, fontSize: 10, color: ApexColors.textMuted),
+          const SizedBox(height: 2),
+          ApexText(
+            value,
+            fontSize: 12,
+            color: ApexColors.textPrimary,
+            fontWeight: FontWeight.w600,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -667,9 +996,13 @@ class _RenewalHint extends StatelessWidget {
 }
 
 class _TransactionsList extends StatelessWidget {
-  const _TransactionsList({required this.async});
+  const _TransactionsList({
+    required this.async,
+    required this.selectedMember,
+  });
 
   final AsyncValue<List<GymTransaction>> async;
+  final Member? selectedMember;
 
   @override
   Widget build(BuildContext context) {
@@ -677,7 +1010,15 @@ class _TransactionsList extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const GoldHeading('Recent Receipts'),
+          GoldHeading(context.t(L10nKeys.recentReceipts), fontSize: 18),
+          const SizedBox(height: 6),
+          ApexText(
+            selectedMember == null
+                ? 'Latest receipt activity for this gym.'
+                : 'Latest receipts stay visible while recording ${selectedMember!.fullName}.',
+            fontSize: 12,
+            color: ApexColors.textSecondary,
+          ),
           const SizedBox(height: 16),
           async.when(
             loading: () => Column(
@@ -695,9 +1036,9 @@ class _TransactionsList extends StatelessWidget {
             ),
             data: (transactions) {
               if (transactions.isEmpty) {
-                return const ApexText(
-                  'No payments recorded yet',
-                  color: Color(0xFF666666),
+                return _PaymentEmptyState(
+                  icon: Icons.receipt_long_rounded,
+                  text: context.t(L10nKeys.noReceiptsYet),
                 );
               }
               return Column(
@@ -721,66 +1062,99 @@ class _TransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusColor = _paymentStatusColor(transaction.paymentStatus);
+    final methodColor = _paymentMethodColor(transaction.paymentMethod);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: ApexRadius.card,
         onTap: () => _showReceiptDetails(context, transaction),
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0A0A0A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: borderDark),
+            color: ApexColors.surface,
+            borderRadius: ApexRadius.card,
+            border: Border.all(color: ApexColors.border),
           ),
-          child: Row(
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.receipt_long_rounded, color: gold, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              SizedBox(
+                width: MediaQuery.of(context).size.width < 700
+                    ? double.infinity
+                    : 220,
+                child: Row(
                   children: [
-                    ApexText(
-                      transaction.memberName.isEmpty
-                          ? transaction.description
-                          : transaction.memberName,
-                      color: const Color(0xFFE2E2E2),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    const SizedBox(height: 3),
-                    ApexText(
-                      transaction.receiptNumber,
-                      fontSize: 10,
-                      color: const Color(0xFF666666),
+                    const Icon(Icons.receipt_long_rounded,
+                        color: gold, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ApexText(
+                            transaction.receiptNumber,
+                            color: ApexColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          ApexText(
+                            transaction.memberName.isEmpty
+                                ? transaction.description
+                                : transaction.memberName,
+                            fontSize: 12,
+                            color: ApexColors.textSecondary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Icon(
-                Icons.keyboard_arrow_up_rounded,
-                color: Color(0xFF444444),
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  ApexText(
-                    '${transaction.amount.toStringAsFixed(0)} ${transaction.currency}',
-                    color: greenSuccess,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  const SizedBox(height: 4),
                   ApexBadge(
-                    text: transaction.paymentMethod,
-                    color: transaction.paymentStatus ==
-                            TransactionPaymentStatus.paid
-                        ? greenSuccess
-                        : orangeWarning,
+                    text: transaction.paymentStatus,
+                    color: statusColor,
+                  ),
+                  ApexBadge(
+                    text: _paymentMethodLabel(transaction.paymentMethod),
+                    color: methodColor,
                   ),
                 ],
+              ),
+              SizedBox(
+                width: MediaQuery.of(context).size.width < 700 ? 130 : 150,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ApexText(
+                      '${transaction.amount.toStringAsFixed(0)} ${transaction.currency}',
+                      color: statusColor,
+                      fontWeight: FontWeight.w800,
+                      textAlign: TextAlign.right,
+                    ),
+                    const SizedBox(height: 3),
+                    ApexText(
+                      _formatDateTime(transaction.createdAt),
+                      fontSize: 10,
+                      color: ApexColors.textMuted,
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -791,6 +1165,22 @@ class _TransactionRow extends StatelessWidget {
 }
 
 void _showReceiptDetails(BuildContext context, GymTransaction transaction) {
+  final isWide = MediaQuery.of(context).size.width >= 900;
+  if (isWide) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 760),
+          child: _ReceiptDetailsSheet(transaction: transaction),
+        ),
+      ),
+    );
+    return;
+  }
+
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -809,6 +1199,21 @@ class _ReceiptDetailsSheet extends ConsumerWidget {
     final memberAsync = transaction.memberId.trim().isEmpty
         ? const AsyncValue<Member?>.data(null)
         : ref.watch(gymMemberByIdProvider(transaction.memberId));
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    if (isWide) {
+      return Container(
+        decoration: BoxDecoration(
+          color: cardDark,
+          borderRadius: ApexRadius.card,
+          border: Border.all(color: borderDark),
+        ),
+        child: _ReceiptDetailsContent(
+          transaction: transaction,
+          memberAsync: memberAsync,
+        ),
+      );
+    }
 
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
@@ -821,80 +1226,106 @@ class _ReceiptDetailsSheet extends ConsumerWidget {
             borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
             border: Border(top: BorderSide(color: borderDark)),
           ),
-          child: ListView(
+          child: _ReceiptDetailsContent(
+            transaction: transaction,
+            memberAsync: memberAsync,
             controller: controller,
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-            children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF444444),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  const Expanded(
-                    child: GoldHeading('Receipt Details', fontSize: 18),
-                  ),
-                  IconButton(
-                    tooltip: 'Copy receipt number',
-                    onPressed: () {
-                      Clipboard.setData(
-                        ClipboardData(text: transaction.receiptNumber),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Receipt number copied.'),
-                          backgroundColor: greenSuccess,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.copy_rounded),
-                    color: const Color(0xFF888888),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                    color: const Color(0xFF888888),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _ReceiptHero(transaction: transaction),
-              const SizedBox(height: 14),
-              memberAsync.when(
-                loading: () => const ShimmerCard(),
-                error: (_, __) => _ReceiptFields(
-                  transaction: transaction,
-                  member: null,
-                  memberError: 'Member details unavailable.',
-                ),
-                data: (member) => _ReceiptFields(
-                  transaction: transaction,
-                  member: member,
-                ),
-              ),
-              if (transaction.memberId.trim().isNotEmpty) ...[
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.go('/members/${transaction.memberId}');
-                  },
-                  icon: const Icon(Icons.person_rounded, size: 18),
-                  label: const Text('View Member'),
-                  style: FilledButton.styleFrom(backgroundColor: gold),
-                ),
-              ],
-            ],
           ),
         );
       },
+    );
+  }
+}
+
+class _ReceiptDetailsContent extends StatelessWidget {
+  const _ReceiptDetailsContent({
+    required this.transaction,
+    required this.memberAsync,
+    this.controller,
+  });
+
+  final GymTransaction transaction;
+  final AsyncValue<Member?> memberAsync;
+  final ScrollController? controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 900;
+
+    return ListView(
+      controller: controller,
+      padding: EdgeInsets.fromLTRB(20, isWide ? 20 : 12, 20, 24),
+      children: [
+        if (!isWide) ...[
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF444444),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: GoldHeading(context.t(L10nKeys.receiptDetails), fontSize: 18),
+            ),
+            IconButton(
+              tooltip: context.t(L10nKeys.copyReceiptNumber),
+              onPressed: () {
+                Clipboard.setData(
+                  ClipboardData(text: transaction.receiptNumber),
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Receipt number copied.'),
+                    backgroundColor: greenSuccess,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded),
+              color: ApexColors.textMuted,
+            ),
+            IconButton(
+              tooltip: context.t(L10nKeys.close),
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_rounded),
+              color: ApexColors.textMuted,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _ReceiptHero(transaction: transaction),
+        const SizedBox(height: 14),
+        memberAsync.when(
+          loading: () => const ShimmerCard(),
+          error: (_, __) => _ReceiptFields(
+            transaction: transaction,
+            member: null,
+            memberError: 'Member details unavailable.',
+          ),
+          data: (member) => _ReceiptFields(
+            transaction: transaction,
+            member: member,
+          ),
+        ),
+        if (transaction.memberId.trim().isNotEmpty) ...[
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.go('/members/${transaction.memberId}');
+            },
+            icon: const Icon(Icons.person_rounded, size: 18),
+            label: Text(context.t(L10nKeys.viewMember)),
+            style: FilledButton.styleFrom(backgroundColor: gold),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -906,15 +1337,13 @@ class _ReceiptHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = transaction.paymentStatus == TransactionPaymentStatus.paid
-        ? greenSuccess
-        : orangeWarning;
+    final statusColor = _paymentStatusColor(transaction.paymentStatus);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderDark),
+        color: ApexColors.surface,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
       ),
       child: Row(
         children: [
@@ -961,19 +1390,6 @@ class _ReceiptFields extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      _ReceiptRow('Member', _fallback(transaction.memberName, 'Unknown member')),
-      _ReceiptRow('Member phone', _fallback(member?.phone, 'Not available')),
-      _ReceiptRow('Plan / Description', _fallback(transaction.description, 'Not available')),
-      _ReceiptRow('Payment method', _paymentMethodLabel(transaction.paymentMethod)),
-      _ReceiptRow('Payment status', transaction.paymentStatus),
-      _ReceiptRow('Subscription ID', _fallback(transaction.subscriptionId, 'Not linked')),
-      _ReceiptRow('Transaction ID', transaction.id),
-      _ReceiptRow('Created date', _formatDateTime(transaction.createdAt)),
-      _ReceiptRow('Created by', _fallback(transaction.createdByName, transaction.createdByUid.isEmpty ? 'Unknown' : transaction.createdByUid)),
-      _ReceiptRow('Notes', _fallback(transaction.notes, 'No notes')),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -981,39 +1397,126 @@ class _ReceiptFields extends StatelessWidget {
           ApexText(memberError!, color: orangeWarning, fontSize: 12),
           const SizedBox(height: 10),
         ],
-        ...rows.map(
-          (row) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A0A0A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderDark),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.receiptSummary),
+          rows: [
+            _ReceiptRow('Receipt', transaction.receiptNumber),
+            _ReceiptRow('Amount',
+                '${transaction.amount.toStringAsFixed(0)} ${transaction.currency}'),
+            _ReceiptRow('Date', _formatDateTime(transaction.createdAt)),
+          ],
+        ),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.members),
+          rows: [
+            _ReceiptRow(
+              'Member',
+              _fallback(transaction.memberName, 'Unknown member'),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 118,
-                  child: ApexText(
-                    row.label,
-                    fontSize: 11,
-                    color: const Color(0xFF777777),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ApexText(
-                    row.value,
-                    color: const Color(0xFFE0E0E0),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            _ReceiptRow('Phone', _fallback(member?.phone, 'Not available')),
+          ],
+        ),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.paymentDetails),
+          rows: [
+            _ReceiptRow(
+              'Method',
+              _paymentMethodLabel(transaction.paymentMethod),
             ),
-          ),
+            _ReceiptRow('Status', transaction.paymentStatus),
+          ],
+        ),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.subscriptionPlan),
+          rows: [
+            _ReceiptRow(
+              'Plan / Description',
+              _fallback(transaction.description, 'Not available'),
+            ),
+            _ReceiptRow(
+              'Subscription ID',
+              _fallback(transaction.subscriptionId, 'Not linked'),
+            ),
+          ],
+        ),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.systemDetails),
+          rows: [
+            _ReceiptRow('Transaction ID', transaction.id),
+            _ReceiptRow(
+              'Created by',
+              _fallback(
+                transaction.createdByName,
+                transaction.createdByUid.isEmpty
+                    ? 'Unknown'
+                    : transaction.createdByUid,
+              ),
+            ),
+          ],
+        ),
+        _ReceiptGroup(
+          title: context.t(L10nKeys.notes),
+          rows: [
+            _ReceiptRow('Notes', _fallback(transaction.notes, 'No notes')),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _ReceiptGroup extends StatelessWidget {
+  const _ReceiptGroup({
+    required this.title,
+    required this.rows,
+  });
+
+  final String title;
+  final List<_ReceiptRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: ApexRadius.card,
+        border: Border.all(color: ApexColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GoldHeading(title, fontSize: 13),
+          const SizedBox(height: 10),
+          ...rows.map(
+            (row) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 126,
+                    child: ApexText(
+                      row.label,
+                      fontSize: 11,
+                      color: ApexColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ApexText(
+                      row.value,
+                      color: ApexColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1037,4 +1540,39 @@ String _formatDateTime(DateTime? date) {
   final hm =
       '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   return '$ymd $hm';
+}
+
+String _formatDate(DateTime? date) {
+  if (date == null) return 'Not set';
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+Color _paymentStatusColor(String status) {
+  switch (status.trim().toLowerCase()) {
+    case TransactionPaymentStatus.paid:
+      return greenSuccess;
+    case TransactionPaymentStatus.partial:
+      return orangeWarning;
+    case TransactionPaymentStatus.unpaid:
+      return redAlert;
+    default:
+      return ApexColors.secondary;
+  }
+}
+
+Color _paymentMethodColor(String method) {
+  switch (method.trim().toLowerCase()) {
+    case TransactionPaymentMethod.cash:
+      return greenSuccess;
+    case TransactionPaymentMethod.instapay:
+      return blueInfo;
+    case TransactionPaymentMethod.vodafoneCash:
+      return orangeWarning;
+    case TransactionPaymentMethod.card:
+      return gold;
+    case TransactionPaymentMethod.online:
+      return ApexColors.secondary;
+    default:
+      return ApexColors.textMuted;
+  }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/models/attendance_session.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
@@ -88,9 +89,12 @@ class _DetailBody extends ConsumerWidget {
 
         return SingleChildScrollView(
           padding: EdgeInsets.all(padding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1280),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               // Back button
               GestureDetector(
                 onTap: () => context.go('/members'),
@@ -103,7 +107,9 @@ class _DetailBody extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
+              _MemberDetailHeader(member: member),
+              const SizedBox(height: 18),
               // Main content
               if (isMobile) ...[
                 // ترتيب عمودي للجوال
@@ -137,7 +143,9 @@ class _DetailBody extends ConsumerWidget {
                   ],
                 ),
               ],
-            ],
+                ],
+              ),
+            ),
           ),
         );
       },
@@ -147,6 +155,104 @@ class _DetailBody extends ConsumerWidget {
 
 // ──────────────────────────────────────────────────────
 // العمود الأيسر (يستخدم كما هو من الكود السابق مع تعديل طفيف للمسافات)
+class _MemberDetailHeader extends StatelessWidget {
+  const _MemberDetailHeader({required this.member});
+
+  final Member member;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final subscriptionState = EffectiveSubscriptionState.fromMember(member);
+    final eligibility = evaluateMemberAccessEligibility(member);
+    final memberStatus = member.status.trim().toLowerCase() == 'active'
+        ? 'Active'
+        : 'Inactive';
+    final memberStatusColor =
+        memberStatus == 'Active' ? greenSuccess : redAlert;
+    final phone = (member.phone ?? '').trim().isEmpty
+        ? 'No phone'
+        : member.phone!.trim();
+    final email = (member.email ?? '').trim();
+
+    return ApexCard(
+      glow: true,
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 16,
+            runSpacing: 14,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                width: isMobile ? 52 : 64,
+                height: isMobile ? 52 : 64,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [avatarColor(member.av), goldDark],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Center(
+                  child: ApexText(
+                    member.av,
+                    fontSize: isMobile ? 16 : 20,
+                    color: ApexColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: isMobile ? double.infinity : 430,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GoldHeading(member.name, fontSize: isMobile ? 18 : 22),
+                    const SizedBox(height: 6),
+                    ApexText(
+                      email.isEmpty ? phone : '$phone - $email',
+                      color: ApexColors.textSecondary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ApexBadge(text: memberStatus, color: memberStatusColor),
+                        ApexBadge(
+                          text: subscriptionState.label,
+                          color: subscriptionState.color,
+                        ),
+                        ApexBadge(
+                          text: eligibility.title,
+                          color: eligibility.color,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ApexText(
+            eligibility.message,
+            color: ApexColors.textSecondary,
+          ),
+          const SizedBox(height: 14),
+          _QuickActions(member: member),
+        ],
+      ),
+    );
+  }
+}
+
 class _LeftColumn extends StatelessWidget {
   final Member member;
   const _LeftColumn({required this.member});
@@ -234,7 +340,7 @@ class _LeftColumn extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const GoldHeading('Subscription', fontSize: 13),
+              GoldHeading(context.t(L10nKeys.subscription), fontSize: 13),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -253,7 +359,10 @@ class _LeftColumn extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              _StatRow('Current Plan', hasSubscriptionSummary ? planName : 'None'),
+              _StatRow(
+                context.t(L10nKeys.currentPlan),
+                hasSubscriptionSummary ? planName : 'None',
+              ),
               _StatRow(
                 'Sub. Ends',
                 member.subscriptionEndDate == null
@@ -283,7 +392,7 @@ class _LeftColumn extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const GoldHeading('Access Identifier', fontSize: 13),
+              GoldHeading(context.t(L10nKeys.accessCredentials), fontSize: 13),
               const SizedBox(height: 10),
               _StatRow('NFC Tag ID', _emptyDash(member.nfcTagId)),
               _StatRow(
@@ -291,7 +400,7 @@ class _LeftColumn extends StatelessWidget {
                 _emptyDash(member.qrCode ?? member.accessCode),
               ),
               _StatRow(
-                'Access Status',
+                context.t(L10nKeys.accessStatus),
                 _emptyDash(member.accessStatus ?? 'active'),
               ),
             ],
@@ -306,7 +415,7 @@ class _LeftColumn extends StatelessWidget {
               _StatRow('Goal', member.goal.replaceAll('_', ' ').toUpperCase()),
               _StatRow('Sessions', '${member.sessions} total'),
               _StatRow('Streak', '🔥 ${member.streak} days'),
-              _StatRow('Attendance', '${(member.att * 100).round()}%'),
+              _StatRow(context.t(L10nKeys.attendance), '${(member.att * 100).round()}%'),
               _StatRow('Body Fat', '${member.bf}%'),
               _StatRow('Muscle Mass', '${member.mm} kg'),
               _StatRow('Last Seen', member.last),
@@ -518,43 +627,171 @@ class _RightColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final tabHeight = (MediaQuery.of(context).size.height *
+            (isMobile ? 0.78 : 0.74))
+        .clamp(isMobile ? 560.0 : 620.0, isMobile ? 720.0 : 780.0)
+        .toDouble();
+    final tabs = <Tab>[
+      Tab(text: context.t(L10nKeys.overview)),
+      Tab(text: context.t(L10nKeys.subscription)),
+      if (canReadBillingHistory) Tab(text: context.t(L10nKeys.payments)),
+      Tab(text: context.t(L10nKeys.attendance)),
+      Tab(text: context.t(L10nKeys.access)),
+    ];
+    final views = <Widget>[
+      _DetailTabScroll(
+        children: [
+          _AttendanceStatusCard(async: attendanceSessionsAsync),
+          const SizedBox(height: 12),
+          _StrengthProgressCard(member: member),
+        ],
+      ),
+      _DetailTabScroll(
+        children: [
+          _CurrentSubscriptionCard(
+            member: member,
+            subscriptionsAsync: subscriptionsAsync,
+          ),
+          if (canReadBillingHistory) ...[
+            const SizedBox(height: 12),
+            _SubscriptionHistoryCard(async: subscriptionsAsync),
+          ],
+        ],
+      ),
+      if (canReadBillingHistory)
+        _DetailTabScroll(
+          children: [
+            _PaymentsHistoryCard(async: transactionsAsync),
+          ],
+        ),
+      _DetailTabScroll(
+        children: [
+          _AttendanceSessionsCard(async: attendanceSessionsAsync),
+          const SizedBox(height: 12),
+          _CheckInHistoryCard(async: checkinsAsync),
+        ],
+      ),
+      _DetailTabScroll(
+        children: [
+          _AccessDetailsCard(member: member),
+        ],
+      ),
+    ];
+
+    return DefaultTabController(
+      length: tabs.length,
+      child: ApexCard(
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+              child: GoldHeading('Member Records', fontSize: 16),
+            ),
+            TabBar(
+              isScrollable: true,
+              labelColor: gold,
+              unselectedLabelColor: ApexColors.textMuted,
+              indicatorColor: gold,
+              tabs: tabs,
+            ),
+            SizedBox(
+              height: tabHeight,
+              child: TabBarView(children: views),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailTabScroll extends StatelessWidget {
+  const _DetailTabScroll({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+}
+
+class _StrengthProgressCard extends StatelessWidget {
+  const _StrengthProgressCard({required this.member});
+
+  final Member member;
+
+  @override
+  Widget build(BuildContext context) {
+    return ApexCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const GoldHeading('Strength Progress', fontSize: 16),
+          const SizedBox(height: 4),
+          const ApexText(
+            '6-week progression per lift',
+            fontSize: 11,
+            color: ApexColors.textMuted,
+          ),
+          const SizedBox(height: 20),
+          if (member.lifts.isEmpty)
+            const ApexText('No lift data recorded', color: ApexColors.textMuted)
+          else
+            ...member.lifts.map((lift) => _LiftCard(lift: lift)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccessDetailsCard extends StatelessWidget {
+  const _AccessDetailsCard({required this.member});
+
+  final Member member;
+
+  @override
+  Widget build(BuildContext context) {
+    final eligibility = evaluateMemberAccessEligibility(member);
+
     return Column(
       children: [
-        _QuickActions(member: member),
-        const SizedBox(height: 12),
-        _CurrentSubscriptionCard(
-          member: member,
-          subscriptionsAsync: subscriptionsAsync,
-        ),
-        const SizedBox(height: 12),
-        _AttendanceStatusCard(async: attendanceSessionsAsync),
-        if (canReadBillingHistory) ...[
-          const SizedBox(height: 12),
-          _PaymentsHistoryCard(async: transactionsAsync),
-          const SizedBox(height: 12),
-          _SubscriptionHistoryCard(async: subscriptionsAsync),
-        ],
-        const SizedBox(height: 12),
-        _AttendanceSessionsCard(async: attendanceSessionsAsync),
-        const SizedBox(height: 12),
-        _CheckInHistoryCard(async: checkinsAsync),
+        _AccessEligibilityPanel(eligibility: eligibility),
         const SizedBox(height: 12),
         ApexCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const GoldHeading('Strength Progress', fontSize: 16),
-              const SizedBox(height: 4),
-              const ApexText(
-                '6-week progression per lift',
-                fontSize: 11,
-                color: Color(0xFF555555),
+          GoldHeading(context.t(L10nKeys.accessCredentials), fontSize: 16),
+              const SizedBox(height: 12),
+              _InfoGrid(
+                rows: [
+                  _InfoRow('NFC Tag ID', _emptyDash(member.nfcTagId)),
+                  _InfoRow('QR Code', _emptyDash(member.qrCode)),
+                  _InfoRow('Access Code', _emptyDash(member.accessCode)),
+                  _InfoRow(
+                    'Access Status',
+                    _emptyDash(member.accessStatus ?? 'active'),
+                  ),
+                  _InfoRow(
+                    'Assigned',
+                    _formatOptionalDateTime(member.accessAssignedAt),
+                  ),
+                  _InfoRow(
+                    'Updated',
+                    _formatOptionalDateTime(member.accessUpdatedAt),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              if (member.lifts.isEmpty)
-                const ApexText('No lift data recorded', color: Color(0xFF444444))
-              else
-                ...member.lifts.map((lift) => _LiftCard(lift: lift)),
             ],
           ),
         ),
@@ -607,7 +844,7 @@ class _QuickActions extends ConsumerWidget {
                 // TODO(phase-2j): preselect this member when Payments supports route params.
                 onPressed: () => context.go('/payments'),
                 icon: const Icon(Icons.receipt_long_rounded, size: 16),
-                label: const Text('Record Payment / Renew'),
+                label: Text(context.t(L10nKeys.recordPaymentRenew)),
                 style: FilledButton.styleFrom(backgroundColor: gold),
               ),
               if (canOpenEditor)
@@ -621,7 +858,7 @@ class _QuickActions extends ConsumerWidget {
                     canManageMemberAccess: canManageMemberAccess,
                   ),
                   icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: const Text('Edit Member'),
+                  label: Text(context.t(L10nKeys.editMember)),
                   style: FilledButton.styleFrom(
                     backgroundColor: card2Dark,
                     foregroundColor: gold,
@@ -761,8 +998,11 @@ class _EditMemberSheetState extends ConsumerState<_EditMemberSheet> {
                       children: [
                         Row(
                           children: [
-                            const Expanded(
-                              child: GoldHeading('Edit Member', fontSize: 18),
+                            Expanded(
+                              child: GoldHeading(
+                                context.t(L10nKeys.editMember),
+                                fontSize: 18,
+                              ),
                             ),
                             IconButton(
                               tooltip: 'Close',

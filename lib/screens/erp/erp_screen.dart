@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/helpers.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/finance_summary.dart';
 import 'package:gymsaas/models/gym_expense.dart';
 import 'package:gymsaas/models/gym_product.dart';
@@ -59,55 +60,63 @@ class _ErpScreenState extends ConsumerState<ErpScreen> {
       backgroundColor: bgDark,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(isMobile ? 16 : 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _FinanceHeader(
-                month: _month,
-                onPrevious: () => setState(
-                  () => _month = DateTime(_month.year, _month.month - 1),
-                ),
-                onNext: () => setState(
-                  () => _month = DateTime(_month.year, _month.month + 1),
-                ),
-                onCurrent: () {
-                  final now = DateTime.now();
-                  setState(() => _month = DateTime(now.year, now.month));
-                },
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 16 : 32,
+            vertical: isMobile ? 18 : 32,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1280),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _FinanceHeader(
+                    month: _month,
+                    onPrevious: () => setState(
+                      () => _month = DateTime(_month.year, _month.month - 1),
+                    ),
+                    onNext: () => setState(
+                      () => _month = DateTime(_month.year, _month.month + 1),
+                    ),
+                    onCurrent: () {
+                      final now = DateTime.now();
+                      setState(() => _month = DateTime(now.year, now.month));
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  summaryAsync.when(
+                    loading: () => const _FinanceLoading(),
+                    error: (error, _) => _FinanceError(error: error),
+                    data: (summary) => _FinanceBody(
+                      summary: summary,
+                      isMobile: isMobile,
+                      onCancelExpense: _cancelExpense,
+                      onCancelSale: _cancelProductSale,
+                      onCancelPayroll: _cancelPayroll,
+                      onShowTransaction: _showTransactionDetails,
+                      onShowExpense: _showExpenseDetails,
+                      onShowSale: _showProductSaleDetails,
+                      onShowPayroll: _showPayrollDetails,
+                      products: productsAsync.valueOrNull ?? const <GymProduct>[],
+                      onShowProduct: _showProductDetails,
+                      actions: _ActionBar(
+                        isMobile: isMobile,
+                        onAddExpense: () => _openExpenseDialog(),
+                        onAddProduct: () => _openProductDialog(),
+                        onSellProduct: () => _openProductSaleDialog(
+                          activeProductsAsync.valueOrNull ??
+                              const <GymProduct>[],
+                          membersAsync.valueOrNull ?? const <Member>[],
+                        ),
+                        onAddPayroll: () => _openPayrollDialog(
+                          staffAsync.valueOrNull ?? const <Staff>[],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
-              _ActionBar(
-                isMobile: isMobile,
-                onAddExpense: () => _openExpenseDialog(),
-                onAddProduct: () => _openProductDialog(),
-                onSellProduct: () => _openProductSaleDialog(
-                  activeProductsAsync.valueOrNull ?? const <GymProduct>[],
-                  membersAsync.valueOrNull ?? const <Member>[],
-                ),
-                onAddPayroll: () => _openPayrollDialog(
-                  staffAsync.valueOrNull ?? const <Staff>[],
-                ),
-              ),
-              const SizedBox(height: 18),
-              summaryAsync.when(
-                loading: () => const _FinanceLoading(),
-                error: (error, _) => _FinanceError(error: error),
-                data: (summary) => _FinanceBody(
-                  summary: summary,
-                  isMobile: isMobile,
-                  onCancelExpense: _cancelExpense,
-                  onCancelSale: _cancelProductSale,
-                  onCancelPayroll: _cancelPayroll,
-                  onShowTransaction: _showTransactionDetails,
-                  onShowExpense: _showExpenseDetails,
-                  onShowSale: _showProductSaleDetails,
-                  onShowPayroll: _showPayrollDetails,
-                  products: productsAsync.valueOrNull ?? const <GymProduct>[],
-                  onShowProduct: _showProductDetails,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -146,7 +155,7 @@ class _ErpScreenState extends ConsumerState<ErpScreen> {
   }
 
   Future<void> _cancelExpense(GymExpense expense) async {
-    final reason = await _askCancellationReason('Cancel Expense');
+    final reason = await _askCancellationReason(context.t(L10nKeys.cancelExpense));
     if (reason == null) return;
     await _runAction(() async {
       final gymId = _currentGymId();
@@ -162,7 +171,9 @@ class _ErpScreenState extends ConsumerState<ErpScreen> {
   }
 
   Future<void> _cancelProductSale(ProductSale sale) async {
-    final reason = await _askCancellationReason('Cancel Product Sale');
+    final reason = await _askCancellationReason(
+      context.t(L10nKeys.cancelProductSale),
+    );
     if (reason == null) return;
     await _runAction(() async {
       final gymId = _currentGymId();
@@ -178,7 +189,7 @@ class _ErpScreenState extends ConsumerState<ErpScreen> {
   }
 
   Future<void> _cancelPayroll(GymStaffPayroll payroll) async {
-    final reason = await _askCancellationReason('Cancel Payroll Entry');
+    final reason = await _askCancellationReason(context.t(L10nKeys.cancelPayroll));
     if (reason == null) return;
     await _runAction(() async {
       final gymId = _currentGymId();
@@ -359,46 +370,89 @@ class _FinanceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ApexCard(
+      padding: const EdgeInsets.all(22),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 16,
+        spacing: 18,
+        children: [
+          SizedBox(
+            width: 420,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GoldHeading(context.t(L10nKeys.financeTitle), fontSize: 22),
+                SizedBox(height: 8),
+                ApexText(
+                  context.t(L10nKeys.financeSubtitle),
+                  fontSize: 13,
+                  color: ApexColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+          _MonthSelector(
+            month: month,
+            onPrevious: onPrevious,
+            onNext: onNext,
+            onCurrent: onCurrent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MonthSelector extends StatelessWidget {
+  const _MonthSelector({
+    required this.month,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onCurrent,
+  });
+
+  final DateTime month;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onCurrent;
+
+  @override
+  Widget build(BuildContext context) {
     return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      runSpacing: 10,
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const GoldHeading('Finance & Operations', fontSize: 18),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            IconButton(
-              onPressed: onPrevious,
-              icon: const Icon(Icons.chevron_left_rounded),
-              color: gold,
-              tooltip: 'Previous month',
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: cardDark,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderDark),
-              ),
-              child: ApexText(
-                _monthLabel(month),
-                color: const Color(0xFFE0E0E0),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            IconButton(
-              onPressed: onNext,
-              icon: const Icon(Icons.chevron_right_rounded),
-              color: gold,
-              tooltip: 'Next month',
-            ),
-            TextButton(
-              onPressed: onCurrent,
-              child: const ApexText('Current Month', color: gold),
-            ),
-          ],
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: gold,
+          tooltip: 'Previous month',
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: ApexDecorations.card(
+            color: ApexColors.surface,
+            borderColor: ApexColors.border,
+            radius: ApexRadius.md,
+          ),
+          child: ApexText(
+            _monthLabel(month),
+            color: ApexColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: gold,
+          tooltip: 'Next month',
+        ),
+        TextButton(
+          onPressed: onCurrent,
+          child: const ApexText('Current Month', color: gold),
         ),
       ],
     );
@@ -423,27 +477,88 @@ class _ActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final buttons = [
-      _ActionButton(Icons.receipt_long_rounded, 'Add Expense', onAddExpense),
-      _ActionButton(Icons.inventory_2_rounded, 'Add Product', onAddProduct),
-      _ActionButton(Icons.point_of_sale_rounded, 'Sell Product', onSellProduct),
-      _ActionButton(Icons.payments_rounded, 'Add Staff Salary', onAddPayroll),
+      _ActionButton(Icons.receipt_long_rounded, context.t(L10nKeys.addExpense), onAddExpense),
+      _ActionButton(Icons.inventory_2_rounded, context.t(L10nKeys.addProduct), onAddProduct),
+      _ActionButton(Icons.point_of_sale_rounded, context.t(L10nKeys.recordProductSale), onSellProduct),
+      _ActionButton(Icons.payments_rounded, context.t(L10nKeys.addStaffPayroll), onAddPayroll),
     ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: buttons
-          .map(
-            (button) => SizedBox(
-              width: isMobile ? double.infinity : null,
-              child: FilledButton.icon(
-                onPressed: button.onPressed,
-                icon: Icon(button.icon, size: 17),
-                label: Text(button.label),
-                style: FilledButton.styleFrom(backgroundColor: gold),
+    return ApexCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PanelHeader(
+            icon: Icons.add_circle_outline_rounded,
+            title: context.t(L10nKeys.quickActions),
+            subtitle: 'Record operational activity without crowding the report.',
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: buttons
+                .map(
+                  (button) => SizedBox(
+                    width: isMobile ? double.infinity : 190,
+                    child: FilledButton.icon(
+                      onPressed: button.onPressed,
+                      icon: Icon(button.icon, size: 17),
+                      label: Text(button.label),
+                      style: FilledButton.styleFrom(backgroundColor: gold),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelHeader extends StatelessWidget {
+  const _PanelHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: ApexDecorations.badge(gold),
+          child: Icon(icon, color: gold, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ApexText(
+                title,
+                color: ApexColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
               ),
-            ),
-          )
-          .toList(),
+              const SizedBox(height: 3),
+              ApexText(
+                subtitle,
+                color: ApexColors.textMuted,
+                fontSize: 12,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -468,6 +583,7 @@ class _FinanceBody extends StatelessWidget {
     required this.onShowPayroll,
     required this.products,
     required this.onShowProduct,
+    required this.actions,
   });
 
   final FinanceSummary summary;
@@ -481,71 +597,122 @@ class _FinanceBody extends StatelessWidget {
   final ValueChanged<GymStaffPayroll> onShowPayroll;
   final List<GymProduct> products;
   final ValueChanged<GymProduct> onShowProduct;
+  final Widget actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (summary.isEmptyMonth) ...[
+          const _EmptyMonth(),
+          const SizedBox(height: 18),
+        ],
+        const _SectionTitle(
+          title: 'Executive Summary',
+          subtitle: 'Click a KPI for records and owner-friendly detail.',
+        ),
+        const SizedBox(height: 12),
+        _KpiGrid(summary: summary, isMobile: isMobile),
+        const SizedBox(height: 20),
+        const _SectionTitle(
+          title: 'Breakdown',
+          subtitle: 'Focus on one operational area at a time.',
+        ),
+        const SizedBox(height: 12),
+        _BreakdownTabs(
+          summary: summary,
+          products: products,
+          onCancelExpense: onCancelExpense,
+          onCancelSale: onCancelSale,
+          onCancelPayroll: onCancelPayroll,
+          onShowTransaction: onShowTransaction,
+          onShowExpense: onShowExpense,
+          onShowSale: onShowSale,
+          onShowPayroll: onShowPayroll,
+          onShowProduct: onShowProduct,
+        ),
+      ],
+    );
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          content,
+          const SizedBox(height: 16),
+          actions,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 7, child: content),
+        const SizedBox(width: 20),
+        Expanded(
+          flex: 3,
+          child: Column(
+            children: [
+              actions,
+              const SizedBox(height: 16),
+              _RecentCard(
+                title: 'Recent Activity',
+                empty: 'No recent finance activity this month.',
+                children: [
+                  ...summary.recentIncomeTransactions.take(3).map(
+                        (tx) => _ListRow(
+                          title: tx.memberName.isEmpty
+                              ? tx.receiptNumber
+                              : tx.memberName,
+                          subtitle: 'Receipt - ${_formatDateTime(tx.createdAt ?? tx.date)}',
+                          amount: tx.amount,
+                          color: greenSuccess,
+                          onTap: () => onShowTransaction(tx),
+                        ),
+                      ),
+                  ...summary.recentExpenses.take(3).map(
+                        (expense) => _ListRow(
+                          title: expense.title,
+                          subtitle: 'Expense - ${_formatDate(expense.date)}',
+                          amount: expense.amount,
+                          color: redAlert,
+                          onTap: () => onShowExpense(expense),
+                        ),
+                      ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (summary.isEmptyMonth) ...[
-          const _EmptyMonth(),
-          const SizedBox(height: 14),
-        ],
-        _KpiGrid(summary: summary, isMobile: isMobile),
-        const SizedBox(height: 16),
-        _TwoColumn(
-          isMobile: isMobile,
-          left: _BreakdownCard(
-            title: 'Revenue by Payment Method',
-            rows: summary.revenueByPaymentMethod,
-          ),
-          right: _BreakdownCard(
-            title: 'Expense by Category',
-            rows: summary.expensesByCategory,
-          ),
+        ApexText(
+          title,
+          fontSize: 16,
+          color: ApexColors.textPrimary,
+          fontWeight: FontWeight.w800,
         ),
-        const SizedBox(height: 16),
-        _TwoColumn(
-          isMobile: isMobile,
-          left: _BreakdownCard(
-            title: 'Product Sales Summary',
-            rows: summary.productSalesByCategory,
-            footer: 'Gross product profit ${_money(summary.grossProductProfit)}',
-          ),
-          right: _BreakdownCard(
-            title: 'Staff Payroll Summary',
-            rows: summary.payrollByRole,
-            footer: 'Pending payroll ${_money(summary.pendingPayroll)}',
-          ),
-        ),
-        const SizedBox(height: 16),
-        _TwoColumn(
-          isMobile: isMobile,
-          left: _RecentTransactions(
-            items: summary.recentIncomeTransactions,
-            onShow: onShowTransaction,
-          ),
-          right: _RecentProductSales(
-            items: summary.recentProductSales,
-            onCancel: onCancelSale,
-            onShow: onShowSale,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _TwoColumn(
-          isMobile: isMobile,
-          left: _RecentExpenses(
-            items: summary.recentExpenses,
-            onCancel: onCancelExpense,
-            onShow: onShowExpense,
-          ),
-          right: _RecentPayroll(
-            items: summary.recentPayrollEntries,
-            onCancel: onCancelPayroll,
-            onShow: onShowPayroll,
-          ),
-        ),
-        const SizedBox(height: 16),
-        _ProductInventory(items: products, onShow: onShowProduct),
+        const SizedBox(height: 5),
+        ApexText(subtitle, fontSize: 13, color: ApexColors.textMuted),
       ],
     );
   }
@@ -560,51 +727,787 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cards = [
-      _Kpi('Total Revenue', summary.totalRevenue, greenSuccess),
-      _Kpi('Membership Revenue', summary.membershipRevenue, blueInfo),
-      _Kpi('Product Revenue', summary.productRevenue, greenSuccess),
-      _Kpi('Operating Expenses', summary.operatingExpenses, redAlert),
-      _Kpi('Staff Salaries', summary.staffSalaryCosts, orangeWarning),
-      _Kpi('Product Costs', summary.productCosts, orangeWarning),
-      _Kpi('Net Profit', summary.netProfit, summary.netProfit >= 0 ? gold : redAlert),
-      _Kpi('Pending Obligations', summary.pendingObligations, orangeWarning),
+      _Kpi(
+        kind: _FinanceKpiKind.revenue,
+        label: context.t(L10nKeys.totalRevenue),
+        value: summary.membershipRevenue,
+        color: greenSuccess,
+        icon: Icons.trending_up_rounded,
+        detail: '${summary.paidReceiptsCount} paid receipts',
+      ),
+      _Kpi(
+        kind: _FinanceKpiKind.expenses,
+        label: context.t(L10nKeys.totalExpenses),
+        value: summary.operatingExpenses,
+        color: redAlert,
+        icon: Icons.money_off_csred_rounded,
+        detail: '${summary.paidExpensesCount} paid expenses',
+      ),
+      _Kpi(
+        kind: _FinanceKpiKind.payroll,
+        label: context.t(L10nKeys.staffPayroll),
+        value: summary.staffSalaryCosts,
+        color: orangeWarning,
+        icon: Icons.groups_2_rounded,
+        detail: '${summary.paidPayrollCount} paid entries',
+      ),
+      _Kpi(
+        kind: _FinanceKpiKind.products,
+        label: context.t(L10nKeys.productSales),
+        value: summary.productRevenue,
+        color: blueInfo,
+        icon: Icons.inventory_2_rounded,
+        detail: '${summary.paidProductSalesCount} paid sales',
+      ),
+      _Kpi(
+        kind: _FinanceKpiKind.netProfit,
+        label: context.t(L10nKeys.netProfit),
+        value: summary.netProfit,
+        color: summary.netProfit >= 0 ? greenSuccess : redAlert,
+        icon: Icons.insights_rounded,
+        detail: summary.netProfit >= 0 ? 'Positive month' : 'Needs attention',
+      ),
     ];
-    return GridView.count(
-      crossAxisCount: isMobile ? 2 : 4,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: isMobile ? 1.08 : 1.55,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: cards.map((card) => _KpiCard(kpi: card)).toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = isMobile
+            ? (constraints.maxWidth >= 360 ? 2 : 1)
+            : constraints.maxWidth >= 1040
+                ? 5
+                : 3;
+        return GridView.count(
+          crossAxisCount: columns,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: isMobile ? (columns == 2 ? 1.02 : 2.5) : 1.36,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: cards
+              .map(
+                (card) => _KpiCard(
+                  kpi: card,
+                  summary: summary,
+                  compact: isMobile,
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 }
 
 class _Kpi {
-  const _Kpi(this.label, this.value, this.color);
+  const _Kpi({
+    required this.kind,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+    required this.detail,
+  });
+  final _FinanceKpiKind kind;
   final String label;
   final double value;
   final Color color;
+  final IconData icon;
+  final String detail;
 }
 
+enum _FinanceKpiKind { revenue, expenses, payroll, products, netProfit }
+
 class _KpiCard extends StatelessWidget {
-  const _KpiCard({required this.kpi});
+  const _KpiCard({
+    required this.kpi,
+    required this.summary,
+    required this.compact,
+  });
 
   final _Kpi kpi;
+  final FinanceSummary summary;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showFinanceKpiDetails(context, kpi.kind, summary),
+        borderRadius: ApexRadius.card,
+        child: ApexCard(
+          padding: EdgeInsets.all(compact ? 12 : 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: compact ? 30 : 34,
+                    height: compact ? 30 : 34,
+                    decoration: ApexDecorations.badge(kpi.color),
+                    child: Icon(kpi.icon, color: kpi.color, size: 18),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: ApexColors.textMuted,
+                    size: 17,
+                  ),
+                ],
+              ),
+              SizedBox(height: compact ? 12 : 18),
+              GoldHeading(_money(kpi.value), fontSize: compact ? 16 : 18),
+              const SizedBox(height: 5),
+              ApexText(
+                kpi.label,
+                color: ApexColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: compact ? 11.5 : 13,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 7),
+              ApexText(
+                kpi.detail,
+                color: ApexColors.textMuted,
+                fontSize: compact ? 10 : 11,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _showFinanceKpiDetails(
+  BuildContext context,
+  _FinanceKpiKind kind,
+  FinanceSummary summary,
+) {
+  final panel = _FinanceKpiDetailPanel(kind: kind, summary: summary);
+  if (MediaQuery.of(context).size.width >= 900) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
+          child: panel,
+        ),
+      ),
+    );
+    return;
+  }
+
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.74,
+      minChildSize: 0.42,
+      maxChildSize: 0.92,
+      builder: (context, controller) => Container(
+        decoration: const BoxDecoration(
+          color: ApexColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          border: Border(top: BorderSide(color: ApexColors.border)),
+        ),
+        child: PrimaryScrollController(
+          controller: controller,
+          child: panel,
+        ),
+      ),
+    ),
+  );
+}
+
+class _FinanceKpiDetailPanel extends StatelessWidget {
+  const _FinanceKpiDetailPanel({
+    required this.kind,
+    required this.summary,
+  });
+
+  final _FinanceKpiKind kind;
+  final FinanceSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: ApexColors.surface,
+        borderRadius: BorderRadius.circular(ApexRadius.xl),
+        border: Border.all(color: ApexColors.border),
+      ),
+      child: ListView(
+        controller: PrimaryScrollController.maybeOf(context),
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+        children: [
+          Row(
+            children: [
+              Expanded(child: GoldHeading(_title, fontSize: 19)),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+                color: ApexColors.textMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ApexText(_subtitle, color: ApexColors.textMuted, fontSize: 13),
+          const SizedBox(height: 18),
+          ..._content(context),
+        ],
+      ),
+    );
+  }
+
+  String get _title {
+    switch (kind) {
+      case _FinanceKpiKind.revenue:
+        return 'Total Revenue Details';
+      case _FinanceKpiKind.expenses:
+        return 'Total Expenses Details';
+      case _FinanceKpiKind.payroll:
+        return 'Staff Payroll Details';
+      case _FinanceKpiKind.products:
+        return 'Product Sales Details';
+      case _FinanceKpiKind.netProfit:
+        return 'Net Profit Formula';
+    }
+  }
+
+  String get _subtitle {
+    switch (kind) {
+      case _FinanceKpiKind.revenue:
+        return 'Membership receipt transactions for the selected month.';
+      case _FinanceKpiKind.expenses:
+        return 'Operating expenses loaded for the selected month.';
+      case _FinanceKpiKind.payroll:
+        return 'Staff salary records loaded for the selected month.';
+      case _FinanceKpiKind.products:
+        return 'Product sales loaded for the selected month.';
+      case _FinanceKpiKind.netProfit:
+        return 'Uses the existing finance summary calculation, including product costs.';
+    }
+  }
+
+  List<Widget> _content(BuildContext context) {
+    switch (kind) {
+      case _FinanceKpiKind.revenue:
+        return [
+          _MetricStrip(
+            rows: [
+              _MetricItem('Paid / partial', _money(summary.membershipRevenue)),
+              _MetricItem('Paid receipts', '${summary.paidReceiptsCount}'),
+              _MetricItem('Partial receipts', '${summary.partialReceiptsCount}'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _TransactionDetailList(items: summary.recentIncomeTransactions),
+        ];
+      case _FinanceKpiKind.expenses:
+        return [
+          _MetricStrip(
+            rows: [
+              _MetricItem('Paid expenses', _money(summary.operatingExpenses)),
+              _MetricItem('Pending', _money(summary.pendingExpenses)),
+              _MetricItem('Paid records', '${summary.paidExpensesCount}'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _ExpenseDetailList(items: summary.recentExpenses),
+        ];
+      case _FinanceKpiKind.payroll:
+        return [
+          _MetricStrip(
+            rows: [
+              _MetricItem('Deducted payroll', _money(summary.staffSalaryCosts)),
+              _MetricItem('Pending payroll', _money(summary.pendingPayroll)),
+              _MetricItem('Paid records', '${summary.paidPayrollCount}'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _PayrollDetailList(items: summary.recentPayrollEntries),
+        ];
+      case _FinanceKpiKind.products:
+        return [
+          _MetricStrip(
+            rows: [
+              _MetricItem('Product sales', _money(summary.productRevenue)),
+              _MetricItem('Product costs', _money(summary.productCosts)),
+              _MetricItem('Gross profit', _money(summary.grossProductProfit)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _ProductSaleDetailList(items: summary.recentProductSales),
+        ];
+      case _FinanceKpiKind.netProfit:
+        final rows = [
+          _FormulaRow('Membership revenue', summary.membershipRevenue, true),
+          _FormulaRow('Product sales', summary.productRevenue, true),
+          _FormulaRow('Operating expenses', summary.operatingExpenses, false),
+          _FormulaRow('Staff payroll', summary.staffSalaryCosts, false),
+          _FormulaRow('Product costs', summary.productCosts, false),
+        ];
+        return [
+          _MetricStrip(
+            rows: [
+              _MetricItem('Net profit', _money(summary.netProfit)),
+              _MetricItem('Total revenue', _money(summary.totalRevenue)),
+              _MetricItem('Total costs', _money(summary.totalCosts)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ApexCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ApexText(
+                  'Net Profit = Membership Revenue + Product Sales - Operating Expenses - Staff Payroll - Product Costs',
+                  color: ApexColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+                const SizedBox(height: 14),
+                ...rows.map((row) => _FormulaAmountRow(row: row)),
+                const Divider(color: ApexColors.border),
+                _AmountRow(
+                  label: 'Net Profit',
+                  value: summary.netProfit,
+                  color: summary.netProfit >= 0 ? greenSuccess : redAlert,
+                ),
+                const SizedBox(height: 10),
+                const ApexText(
+                  'This is the owner view of what the selected month kept after operating costs, payroll, and product cost of goods.',
+                  color: ApexColors.textMuted,
+                  fontSize: 12,
+                ),
+              ],
+            ),
+          ),
+        ];
+    }
+  }
+}
+
+class _MetricStrip extends StatelessWidget {
+  const _MetricStrip({required this.rows});
+
+  final List<_MetricItem> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: rows
+          .map(
+            (row) => Container(
+              width: MediaQuery.of(context).size.width < 520 ? 150 : 190,
+              padding: const EdgeInsets.all(12),
+              decoration: ApexDecorations.card(
+                color: ApexColors.card,
+                borderColor: ApexColors.border,
+                radius: ApexRadius.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ApexText(row.label, color: ApexColors.textMuted, fontSize: 11),
+                  const SizedBox(height: 6),
+                  ApexText(
+                    row.value,
+                    color: ApexColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _MetricItem {
+  const _MetricItem(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+class _FormulaRow {
+  const _FormulaRow(this.label, this.value, this.add);
+
+  final String label;
+  final double value;
+  final bool add;
+}
+
+class _FormulaAmountRow extends StatelessWidget {
+  const _FormulaAmountRow({required this.row});
+
+  final _FormulaRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AmountRow(
+      label: '${row.add ? '+' : '-'} ${row.label}',
+      value: row.value,
+      color: row.add ? greenSuccess : redAlert,
+    );
+  }
+}
+
+class _TransactionDetailList extends StatelessWidget {
+  const _TransactionDetailList({required this.items});
+
+  final List<GymTransaction> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const _DetailEmpty('No revenue receipts this month.');
+    return Column(
+      children: items
+          .map(
+            (tx) => _DetailListRow(
+              icon: Icons.receipt_long_rounded,
+              title: tx.receiptNumber,
+              subtitle:
+                  '${tx.memberName.isEmpty ? 'Unknown member' : tx.memberName} - ${_label(tx.paymentMethod)} - ${_formatDateTime(tx.createdAt ?? tx.date)}',
+              trailing: _amount(tx.amount, tx.currency),
+              status: _label(tx.paymentStatus),
+              color: greenSuccess,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _ExpenseDetailList extends StatelessWidget {
+  const _ExpenseDetailList({required this.items});
+
+  final List<GymExpense> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const _DetailEmpty('No expenses this month.');
+    return Column(
+      children: items
+          .map(
+            (expense) => _DetailListRow(
+              icon: Icons.money_off_csred_rounded,
+              title: expense.title,
+              subtitle:
+                  '${_label(expense.category)} - ${_formatDate(expense.date)}',
+              trailing: _amount(expense.amount, expense.currency),
+              status: _label(expense.status),
+              color: expense.status == GymExpenseStatus.cancelled
+                  ? ApexColors.textMuted
+                  : redAlert,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _PayrollDetailList extends StatelessWidget {
+  const _PayrollDetailList({required this.items});
+
+  final List<GymStaffPayroll> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const _DetailEmpty('No payroll records this month.');
+    return Column(
+      children: items
+          .map(
+            (payroll) => _DetailListRow(
+              icon: Icons.account_balance_wallet_rounded,
+              title: payroll.staffName,
+              subtitle:
+                  '${_label(payroll.role)} - ${_formatMonth(payroll.periodMonth)} - ${_formatDate(payroll.paymentDate)}',
+              trailing: _amount(payroll.salaryAmount, payroll.currency),
+              status: _label(payroll.status),
+              color: payroll.status == StaffPayrollStatus.cancelled
+                  ? ApexColors.textMuted
+                  : orangeWarning,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _ProductSaleDetailList extends StatelessWidget {
+  const _ProductSaleDetailList({required this.items});
+
+  final List<ProductSale> items;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const _DetailEmpty('No product sales this month.');
+    return Column(
+      children: items
+          .map(
+            (sale) => _DetailListRow(
+              icon: Icons.shopping_cart_rounded,
+              title: sale.productName,
+              subtitle:
+                  '${sale.quantity} sold - ${_formatDateTime(sale.saleDate)}',
+              trailing: _amount(sale.totalRevenue, sale.currency),
+              status: _label(sale.status),
+              color: sale.status == ProductSaleStatus.cancelled
+                  ? ApexColors.textMuted
+                  : blueInfo,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _DetailListRow extends StatelessWidget {
+  const _DetailListRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    required this.status,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String trailing;
+  final String status;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: ApexDecorations.card(
+        color: ApexColors.card,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ApexText(
+                  title,
+                  color: ApexColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 3),
+                ApexText(
+                  subtitle,
+                  color: ApexColors.textMuted,
+                  fontSize: 11,
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              ApexText(trailing, color: color, fontWeight: FontWeight.w800),
+              const SizedBox(height: 4),
+              ApexText(status, color: ApexColors.textMuted, fontSize: 10),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailEmpty extends StatelessWidget {
+  const _DetailEmpty(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: ApexSpacing.emptyState,
+      decoration: ApexDecorations.card(
+        color: ApexColors.card,
+        borderColor: ApexColors.border,
+        radius: ApexRadius.md,
+      ),
+      child: Center(
+        child: ApexText(text, color: ApexColors.textMuted),
+      ),
+    );
+  }
+}
+
+class _BreakdownTabs extends StatelessWidget {
+  const _BreakdownTabs({
+    required this.summary,
+    required this.products,
+    required this.onCancelExpense,
+    required this.onCancelSale,
+    required this.onCancelPayroll,
+    required this.onShowTransaction,
+    required this.onShowExpense,
+    required this.onShowSale,
+    required this.onShowPayroll,
+    required this.onShowProduct,
+  });
+
+  final FinanceSummary summary;
+  final List<GymProduct> products;
+  final ValueChanged<GymExpense> onCancelExpense;
+  final ValueChanged<ProductSale> onCancelSale;
+  final ValueChanged<GymStaffPayroll> onCancelPayroll;
+  final ValueChanged<GymTransaction> onShowTransaction;
+  final ValueChanged<GymExpense> onShowExpense;
+  final ValueChanged<ProductSale> onShowSale;
+  final ValueChanged<GymStaffPayroll> onShowPayroll;
+  final ValueChanged<GymProduct> onShowProduct;
 
   @override
   Widget build(BuildContext context) {
     return ApexCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.analytics_rounded, color: kpi.color, size: 18),
-          const Spacer(),
-          GoldHeading(_money(kpi.value), fontSize: 17),
-          const SizedBox(height: 5),
-          ApexText(kpi.label, color: const Color(0xFF999999), maxLines: 2),
-        ],
+      padding: const EdgeInsets.all(16),
+      child: DefaultTabController(
+        length: 5,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TabBar(
+              isScrollable: true,
+              tabs: [
+                Tab(text: context.t(L10nKeys.revenue)),
+                Tab(text: context.t(L10nKeys.expenses)),
+                Tab(text: context.t(L10nKeys.payroll)),
+                Tab(text: context.t(L10nKeys.products)),
+                Tab(text: context.t(L10nKeys.audit)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 430,
+              child: TabBarView(
+                children: [
+                  SingleChildScrollView(
+                    child: _TwoColumn(
+                      isMobile: MediaQuery.of(context).size.width < 760,
+                      left: _BreakdownCard(
+                        title: 'Revenue by Payment Method',
+                        rows: summary.revenueByPaymentMethod,
+                      ),
+                      right: _RecentTransactions(
+                        items: summary.recentIncomeTransactions,
+                        onShow: onShowTransaction,
+                      ),
+                    ),
+                  ),
+                  SingleChildScrollView(
+                    child: _TwoColumn(
+                      isMobile: MediaQuery.of(context).size.width < 760,
+                      left: _BreakdownCard(
+                        title: 'Expense by Category',
+                        rows: summary.expensesByCategory,
+                        footer: 'Pending expenses ${_money(summary.pendingExpenses)}',
+                      ),
+                      right: _RecentExpenses(
+                        items: summary.recentExpenses,
+                        onCancel: onCancelExpense,
+                        onShow: onShowExpense,
+                      ),
+                    ),
+                  ),
+                  SingleChildScrollView(
+                    child: _TwoColumn(
+                      isMobile: MediaQuery.of(context).size.width < 760,
+                      left: _BreakdownCard(
+                        title: 'Payroll by Role',
+                        rows: summary.payrollByRole,
+                        footer: 'Pending payroll ${_money(summary.pendingPayroll)}',
+                      ),
+                      right: _RecentPayroll(
+                        items: summary.recentPayrollEntries,
+                        onCancel: onCancelPayroll,
+                        onShow: onShowPayroll,
+                      ),
+                    ),
+                  ),
+                  SingleChildScrollView(
+                    child: _TwoColumn(
+                      isMobile: MediaQuery.of(context).size.width < 760,
+                      left: _BreakdownCard(
+                        title: 'Product Sales by Category',
+                        rows: summary.productSalesByCategory,
+                        footer: 'Gross product profit ${_money(summary.grossProductProfit)}',
+                      ),
+                      right: _ProductInventory(
+                        items: products,
+                        onShow: onShowProduct,
+                      ),
+                    ),
+                  ),
+                  SingleChildScrollView(
+                    child: _TwoColumn(
+                      isMobile: MediaQuery.of(context).size.width < 760,
+                      left: _RecentProductSales(
+                        items: summary.recentProductSales,
+                        onCancel: onCancelSale,
+                        onShow: onShowSale,
+                      ),
+                      right: _RecentCard(
+                        title: 'Recent Finance Records',
+                        empty: 'No recent finance records this month.',
+                        children: [
+                          ...summary.recentExpenses.take(4).map(
+                                (expense) => _ListRow(
+                                  title: expense.title,
+                                  subtitle: 'Expense / ${expense.status}',
+                                  amount: expense.amount,
+                                  color: redAlert,
+                                  onTap: () => onShowExpense(expense),
+                                ),
+                              ),
+                          ...summary.recentPayrollEntries.take(4).map(
+                                (payroll) => _ListRow(
+                                  title: payroll.staffName,
+                                  subtitle: 'Payroll / ${payroll.status}',
+                                  amount: payroll.salaryAmount,
+                                  color: orangeWarning,
+                                  onTap: () => onShowPayroll(payroll),
+                                ),
+                              ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -651,13 +1554,17 @@ class _BreakdownCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ApexCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GoldHeading(title, fontSize: 15),
           const SizedBox(height: 12),
           if (rows.isEmpty)
-            const ApexText('No paid records this month.', color: Color(0xFF777777))
+            const ApexText(
+              'No paid records this month.',
+              color: ApexColors.textMuted,
+            )
           else
             ...rows.entries.map(
               (row) => _AmountRow(label: _label(row.key), value: row.value),
@@ -836,13 +1743,14 @@ class _RecentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ApexCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GoldHeading(title, fontSize: 15),
           const SizedBox(height: 12),
           if (children.isEmpty)
-            ApexText(empty, color: const Color(0xFF777777))
+            ApexText(empty, color: ApexColors.textMuted)
           else
             ...children,
         ],
@@ -856,6 +1764,7 @@ class _ListRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.amount,
+    this.color = gold,
     this.onCancel,
     this.onTap,
   });
@@ -863,6 +1772,7 @@ class _ListRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final double amount;
+  final Color color;
   final VoidCallback? onCancel;
   final VoidCallback? onTap;
 
@@ -876,13 +1786,24 @@ class _ListRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ApexText(title, color: const Color(0xFFE0E0E0), maxLines: 1),
+                ApexText(
+                  title,
+                  color: ApexColors.textPrimary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 3),
-                ApexText(subtitle, color: const Color(0xFF777777), fontSize: 11),
+                ApexText(
+                  subtitle,
+                  color: ApexColors.textMuted,
+                  fontSize: 11,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
-          ApexText(_money(amount), color: gold, fontWeight: FontWeight.w700),
+          ApexText(_money(amount), color: color, fontWeight: FontWeight.w700),
           if (onCancel != null)
             IconButton(
               onPressed: onCancel,
@@ -896,15 +1817,15 @@ class _ListRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(10),
+        color: ApexColors.card,
+        borderRadius: BorderRadius.circular(ApexRadius.md),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(ApexRadius.md),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderDark),
+              borderRadius: BorderRadius.circular(ApexRadius.md),
+              border: Border.all(color: ApexColors.border),
             ),
             child: row,
           ),
@@ -915,10 +1836,15 @@ class _ListRow extends StatelessWidget {
 }
 
 class _AmountRow extends StatelessWidget {
-  const _AmountRow({required this.label, required this.value});
+  const _AmountRow({
+    required this.label,
+    required this.value,
+    this.color = gold,
+  });
 
   final String label;
   final double value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -926,8 +1852,8 @@ class _AmountRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Expanded(child: ApexText(label, color: const Color(0xFFBBBBBB))),
-          ApexText(_money(value), color: gold, fontWeight: FontWeight.w700),
+          Expanded(child: ApexText(label, color: ApexColors.textSecondary)),
+          ApexText(_money(value), color: color, fontWeight: FontWeight.w700),
         ],
       ),
     );
@@ -1160,7 +2086,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
   @override
   Widget build(BuildContext context) {
     return _FinanceDialog(
-      title: 'Add Expense',
+      title: context.t(L10nKeys.addExpense),
       saving: _saving,
       onSave: _save,
       children: [
@@ -1241,7 +2167,7 @@ class _ProductDialogState extends ConsumerState<_ProductDialog> {
   @override
   Widget build(BuildContext context) {
     return _FinanceDialog(
-      title: 'Add Product',
+      title: context.t(L10nKeys.addProduct),
       saving: _saving,
       onSave: _save,
       children: [
@@ -1437,7 +2363,7 @@ class _PayrollDialogState extends ConsumerState<_PayrollDialog> {
   @override
   Widget build(BuildContext context) {
     return _FinanceDialog(
-      title: 'Add Staff Salary',
+      title: context.t(L10nKeys.addStaffPayroll),
       saving: _saving,
       onSave: _save,
       children: [

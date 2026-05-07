@@ -1,6 +1,7 @@
 import 'package:gymsaas/models/user_profile.dart';
 
 const String ownerRole = 'owner';
+const String platformOwnerRole = 'platformOwner';
 const String adminRole = 'admin';
 const String receptionRole = 'reception';
 const String coachRole = 'coach';
@@ -16,9 +17,11 @@ const String plansRoute = '/plans';
 const String settingsRoute = '/settings';
 const String memberAppRoute = '/member-app';
 const String aiRoute = '/ai';
+const String platformRoute = '/platform';
 const String accessErrorRoute = '/access-error';
 
 const Set<String> _knownRoles = {
+  'platformowner',
   ownerRole,
   adminRole,
   receptionRole,
@@ -27,6 +30,9 @@ const Set<String> _knownRoles = {
 };
 
 const Map<String, Set<String>> _roleRoutes = {
+  'platformowner': {
+    platformRoute,
+  },
   ownerRole: {
     dashboardRoute,
     membersRoute,
@@ -77,6 +83,10 @@ bool isActiveStatus(String? status) {
   return (status ?? '').trim().toLowerCase() == 'active';
 }
 
+bool isPlatformOwnerRole(String? role) {
+  return normalizeRole(role) == normalizeRole(platformOwnerRole);
+}
+
 bool canAccessRoute({
   required String role,
   required String route,
@@ -107,6 +117,8 @@ String firstAllowedRouteForRole(String role) {
     case ownerRole:
     case adminRole:
       return dashboardRoute;
+    case 'platformowner':
+      return platformRoute;
     case receptionRole:
     case coachRole:
       return membersRoute;

@@ -1,11 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/firebase_options.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/navigation/router.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
+import 'package:gymsaas/providers/language_provider.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 
 Future<void> main() async {
@@ -23,11 +26,11 @@ class ApexApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authAsync = ref.watch(authStateProvider);
     final authUser = authAsync.valueOrNull ?? FirebaseAuth.instance.currentUser;
+    final language = ref.watch(appLanguageProvider);
 
     if (authAsync.isLoading && authUser == null) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: apexTheme,
+      return _LocalizedMaterialApp(
+        language: language,
         home: const _AuthLoadingScreen(),
       );
     }
@@ -38,11 +41,25 @@ class ApexApp extends ConsumerWidget {
         loading: () => MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: apexTheme,
+          locale: language.locale,
+          supportedLocales: AppLanguage.values.map((item) => item.locale),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
           home: const _AuthLoadingScreen(),
         ),
         error: (error, _) => MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: apexTheme,
+          locale: language.locale,
+          supportedLocales: AppLanguage.values.map((item) => item.locale),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
           home: _AuthProfileErrorScreen(
             title: 'Profile Load Failed',
             message:
@@ -54,15 +71,21 @@ class ApexApp extends ConsumerWidget {
             return MaterialApp(
               debugShowCheckedModeBanner: false,
               theme: apexTheme,
+              locale: language.locale,
+              supportedLocales: AppLanguage.values.map((item) => item.locale),
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
               home: const _MissingProfileScreen(),
             );
           }
 
           final router = ref.watch(routerProvider);
-          return MaterialApp.router(
+          return _LocalizedMaterialApp.router(
+            language: language,
             title: 'APEX Gym Management',
-            debugShowCheckedModeBanner: false,
-            theme: apexTheme,
             routerConfig: router,
           );
         },
@@ -70,11 +93,60 @@ class ApexApp extends ConsumerWidget {
     }
 
     final router = ref.watch(routerProvider);
-    return MaterialApp.router(
+    return _LocalizedMaterialApp.router(
+      language: language,
       title: 'APEX Gym Management',
+      routerConfig: router,
+    );
+  }
+}
+
+class _LocalizedMaterialApp extends StatelessWidget {
+  const _LocalizedMaterialApp({
+    required this.language,
+    required this.home,
+  })  : routerConfig = null,
+        title = 'APEX Gym Management';
+
+  const _LocalizedMaterialApp.router({
+    required this.language,
+    required this.title,
+    required this.routerConfig,
+  }) : home = null;
+
+  final AppLanguage language;
+  final String title;
+  final Widget? home;
+  final RouterConfig<Object>? routerConfig;
+
+  static const _delegates = [
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (routerConfig != null) {
+      return MaterialApp.router(
+        title: title,
+        debugShowCheckedModeBanner: false,
+        theme: apexTheme,
+        locale: language.locale,
+        supportedLocales: AppLanguage.values.map((item) => item.locale),
+        localizationsDelegates: _delegates,
+        routerConfig: routerConfig,
+      );
+    }
+
+    return MaterialApp(
+      title: title,
       debugShowCheckedModeBanner: false,
       theme: apexTheme,
-      routerConfig: router,
+      locale: language.locale,
+      supportedLocales: AppLanguage.values.map((item) => item.locale),
+      localizationsDelegates: _delegates,
+      home: home,
     );
   }
 }

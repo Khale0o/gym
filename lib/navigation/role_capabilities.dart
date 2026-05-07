@@ -1,4 +1,5 @@
 class AppRoles {
+  static const platformOwner = 'platformOwner';
   static const owner = 'owner';
   static const admin = 'admin';
   static const reception = 'reception';
@@ -6,6 +7,7 @@ class AppRoles {
   static const member = 'member';
 
   static const all = <String>{
+    platformOwner,
     owner,
     admin,
     reception,
@@ -16,6 +18,10 @@ class AppRoles {
 
 class RoleCapabilities {
   const RoleCapabilities._();
+
+  static bool canAccessPlatformAdmin(String role) {
+    return _normalized(role) == _normalized(AppRoles.platformOwner);
+  }
 
   static bool canCreateMember(String role) {
     return _normalized(role) == AppRoles.owner ||

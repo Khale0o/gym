@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/navigation/role_access.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/occupancy_provider.dart';
@@ -10,23 +11,28 @@ import 'package:gymsaas/screens/access/access_error_screen.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 
 class _NavItem {
-  final String label;
+  final String labelKey;
   final IconData icon;
   final String route;
-  const _NavItem(this.label, this.icon, this.route);
+  const _NavItem(this.labelKey, this.icon, this.route);
 }
 
 const _navItems = [
-  _NavItem('Dashboard', Icons.dashboard_rounded, dashboardRoute),
-  _NavItem('Members', Icons.people_rounded, membersRoute),
-  _NavItem('Check-in', Icons.nfc_rounded, checkinRoute),
-  _NavItem('Staff', Icons.manage_accounts_rounded, staffManagementRoute),
-  _NavItem('Plans', Icons.workspace_premium_rounded, plansRoute),
-  _NavItem('Payments', Icons.point_of_sale_rounded, paymentsRoute),
-  _NavItem('Settings', Icons.settings_rounded, settingsRoute),
-  _NavItem('Finance', Icons.account_balance_wallet_rounded, financeRoute),
-  _NavItem('Member App', Icons.phone_android_rounded, memberAppRoute),
-  _NavItem('AI Engine', Icons.auto_awesome_rounded, aiRoute),
+  _NavItem(L10nKeys.dashboard, Icons.dashboard_rounded, dashboardRoute),
+  _NavItem(L10nKeys.members, Icons.people_rounded, membersRoute),
+  _NavItem(L10nKeys.checkIn, Icons.nfc_rounded, checkinRoute),
+  _NavItem(L10nKeys.staff, Icons.manage_accounts_rounded, staffManagementRoute),
+  _NavItem(L10nKeys.plans, Icons.workspace_premium_rounded, plansRoute),
+  _NavItem(L10nKeys.payments, Icons.point_of_sale_rounded, paymentsRoute),
+  _NavItem(L10nKeys.settings, Icons.settings_rounded, settingsRoute),
+  _NavItem(L10nKeys.finance, Icons.account_balance_wallet_rounded, financeRoute),
+  _NavItem(L10nKeys.memberApp, Icons.phone_android_rounded, memberAppRoute),
+  _NavItem(L10nKeys.aiEngine, Icons.auto_awesome_rounded, aiRoute),
+  _NavItem(
+    L10nKeys.platformAdmin,
+    Icons.admin_panel_settings_rounded,
+    platformRoute,
+  ),
 ];
 
 class AdminShell extends ConsumerStatefulWidget {
@@ -154,7 +160,7 @@ class _AdminShellState extends ConsumerState<AdminShell> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               children: [
-                const _NavSectionLabel('Workspace'),
+                _NavSectionLabel(context.t(L10nKeys.workspace)),
                 ...visibleNavItems
                     .where((item) => item.route != settingsRoute)
                     .map((item) {
@@ -167,7 +173,7 @@ class _AdminShellState extends ConsumerState<AdminShell> {
                   );
                 }),
                 const SizedBox(height: 14),
-                const _NavSectionLabel('System'),
+                _NavSectionLabel(context.t(L10nKeys.system)),
                 ...visibleNavItems
                     .where((item) => item.route == settingsRoute)
                     .map((item) {
@@ -183,14 +189,15 @@ class _AdminShellState extends ConsumerState<AdminShell> {
             ),
           ),
           const Divider(color: ApexColors.border, height: 1),
-          ref.watch(occupancyStreamProvider).when(
-                data: (count) => _OccupancyIndicator(
-                  count: count.round(),
-                  collapsed: false,
+          if (!isPlatformOwnerRole(role))
+            ref.watch(occupancyStreamProvider).when(
+                  data: (count) => _OccupancyIndicator(
+                    count: count.round(),
+                    collapsed: false,
+                  ),
+                  loading: () => const SizedBox(height: 56),
+                  error: (_, __) => const SizedBox(height: 56),
                 ),
-                loading: () => const SizedBox(height: 56),
-                error: (_, __) => const SizedBox(height: 56),
-              ),
           const SizedBox(height: 8),
         ],
       ),
@@ -346,7 +353,7 @@ class _NavTileState extends State<_NavTile> {
               if (!widget.collapsed) ...[
                 const SizedBox(width: 11),
                 ApexText(
-                  widget.item.label,
+                  context.t(widget.item.labelKey),
                   fontSize: 13,
                   color: textColor,
                   fontWeight:

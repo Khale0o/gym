@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
 import 'package:gymsaas/core/helpers.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/effective_subscription_status.dart';
 import 'package:gymsaas/models/member_access_eligibility.dart';
 import 'package:gymsaas/models/member.dart';
@@ -14,6 +15,7 @@ import 'package:gymsaas/navigation/role_capabilities.dart';
 import 'package:gymsaas/providers/auth_provider.dart';
 import 'package:gymsaas/providers/gym_scoped_providers.dart';
 import 'package:gymsaas/repositories/member_repository.dart';
+import 'package:gymsaas/widgets/apex_card.dart';
 import 'package:gymsaas/widgets/apex_text.dart';
 import 'package:gymsaas/widgets/gold_heading.dart';
 import 'package:gymsaas/widgets/apex_badge.dart';
@@ -28,6 +30,9 @@ class MembersScreen extends ConsumerStatefulWidget {
 
 class _MembersScreenState extends ConsumerState<MembersScreen> {
   String _query = '';
+  String _statusFilter = 'all';
+  String _subscriptionFilter = 'all';
+  String _accessFilter = 'all';
 
   @override
   Widget build(BuildContext context) {
@@ -40,37 +45,39 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
 
     return Scaffold(
       backgroundColor: bgDark,
-      body: Padding(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
-        child: Column(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1240),
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
+              child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const GoldHeading('Members', fontSize: 18),
-                const Spacer(),
-                async.maybeWhen(
-                  data: (list) => ApexText(
-                    '${list.length} total',
-                    fontSize: 12,
-                    color: const Color(0xFF555555),
-                  ),
-                  orElse: () => const SizedBox.shrink(),
-                ),
-                if (canCreateMember) ...[
-                  const SizedBox(width: 12),
-                  _AddMemberButton(
-                    onPressed: () => _showAddMemberDialog(context),
-                    compact: isMobile,
-                  ),
-                ],
-              ],
+            async.maybeWhen(
+              data: (list) => _MembersHeader(
+                totalCount: list.length,
+                activeCount: list
+                    .where((member) =>
+                        member.status.trim().toLowerCase() == 'active')
+                    .length,
+                canCreateMember: canCreateMember,
+                compact: isMobile,
+                onAddMember: () => _showAddMemberDialog(context),
+              ),
+              orElse: () => _MembersHeader(
+                totalCount: null,
+                activeCount: null,
+                canCreateMember: canCreateMember,
+                compact: isMobile,
+                onAddMember: () => _showAddMemberDialog(context),
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
               style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
               decoration: InputDecoration(
-                hintText: 'Search members…',
+                hintText: context.t(L10nKeys.searchMembers),
                 hintStyle: const TextStyle(color: Color(0xFF444444), fontSize: 13),
                 prefixIcon: const Icon(Icons.search_rounded,
                     color: Color(0xFF444444), size: 18),
@@ -93,6 +100,18 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
             ),
             const SizedBox(height: 16),
+            _MembersFilterControls(
+              statusFilter: _statusFilter,
+              subscriptionFilter: _subscriptionFilter,
+              accessFilter: _accessFilter,
+              onStatusChanged: (value) =>
+                  setState(() => _statusFilter = value ?? 'all'),
+              onSubscriptionChanged: (value) =>
+                  setState(() => _subscriptionFilter = value ?? 'all'),
+              onAccessChanged: (value) =>
+                  setState(() => _accessFilter = value ?? 'all'),
+            ),
+            const SizedBox(height: 16),
             Expanded(
               child: async.when(
                 loading: () => ListView.separated(
@@ -107,11 +126,8 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                   ),
                 ),
                 data: (members) {
-                  final filtered = _query.isEmpty
-                      ? members
-                      : members
-                          .where((m) => m.name.toLowerCase().contains(_query))
-                          .toList();
+                  final filtered =
+                      members.where(_matchesMemberFilters).toList();
                   if (members.isEmpty) {
                     return _MembersEmptyState(
                       canCreateMember: canCreateMember,
@@ -119,8 +135,11 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                     );
                   }
                   if (filtered.isEmpty) {
-                    return const Center(
-                      child: ApexText('No members found', color: Color(0xFF444444)),
+                    return Center(
+                      child: ApexText(
+                        context.t(L10nKeys.search),
+                        color: Color(0xFF444444),
+                      ),
                     );
                   }
                   return ListView.separated(
@@ -132,9 +151,64 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
               ),
             ),
           ],
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  bool _matchesMemberFilters(Member member) {
+    final query = _query.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      final haystack = [
+        member.name,
+        member.fullName,
+        member.phone ?? '',
+        member.email ?? '',
+        member.accessCode ?? '',
+        member.qrCode ?? '',
+        member.nfcTagId ?? '',
+      ].join(' ').toLowerCase();
+      if (!haystack.contains(query)) {
+        return false;
+      }
+    }
+
+    final status = member.status.trim().toLowerCase();
+    if (_statusFilter == 'active' && status != 'active') {
+      return false;
+    }
+    if (_statusFilter == 'inactive' && status == 'active') {
+      return false;
+    }
+
+    final subscriptionState = EffectiveSubscriptionState.fromMember(member);
+    if (_subscriptionFilter != 'all' &&
+        subscriptionState.status.name != _subscriptionFilter) {
+      return false;
+    }
+
+    if (_accessFilter != 'all' && _memberAccessKey(member) != _accessFilter) {
+      return false;
+    }
+
+    return true;
+  }
+
+  String _memberAccessKey(Member member) {
+    final raw = (member.accessStatus ?? '').trim().toLowerCase();
+    final hasIdentifier = (member.nfcTagId ?? '').trim().isNotEmpty ||
+        (member.qrCode ?? '').trim().isNotEmpty ||
+        (member.accessCode ?? '').trim().isNotEmpty;
+    if (!hasIdentifier) {
+      return 'not_assigned';
+    }
+    if (raw.isEmpty) {
+      return 'active';
+    }
+    return raw.replaceAll(' ', '_');
   }
 
   Future<void> _showAddMemberDialog(BuildContext context) {
@@ -142,6 +216,171 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => const _AddMemberDialog(),
+    );
+  }
+}
+
+class _MembersHeader extends StatelessWidget {
+  const _MembersHeader({
+    required this.totalCount,
+    required this.activeCount,
+    required this.canCreateMember,
+    required this.compact,
+    required this.onAddMember,
+  });
+
+  final int? totalCount;
+  final int? activeCount;
+  final bool canCreateMember;
+  final bool compact;
+  final VoidCallback onAddMember;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = totalCount == null
+        ? context.t(L10nKeys.membersSubtitle)
+        : '$totalCount total members - ${activeCount ?? 0} active';
+
+    return ApexCard(
+      padding: EdgeInsets.all(compact ? 14 : 18),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 12,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: compact ? double.infinity : 560,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GoldHeading(context.t(L10nKeys.members), fontSize: 20),
+                const SizedBox(height: 5),
+                ApexText(
+                  subtitle,
+                  fontSize: 12,
+                  color: ApexColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+          if (canCreateMember)
+            _AddMemberButton(onPressed: onAddMember, compact: compact),
+        ],
+      ),
+    );
+  }
+}
+
+class _MembersFilterControls extends StatelessWidget {
+  const _MembersFilterControls({
+    required this.statusFilter,
+    required this.subscriptionFilter,
+    required this.accessFilter,
+    required this.onStatusChanged,
+    required this.onSubscriptionChanged,
+    required this.onAccessChanged,
+  });
+
+  final String statusFilter;
+  final String subscriptionFilter;
+  final String accessFilter;
+  final ValueChanged<String?> onStatusChanged;
+  final ValueChanged<String?> onSubscriptionChanged;
+  final ValueChanged<String?> onAccessChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _MemberFilterDropdown(
+          label: context.t(L10nKeys.memberStatus),
+          value: statusFilter,
+          items: {
+            'all': context.t(L10nKeys.allMembers),
+            'active': context.t(L10nKeys.active),
+            'inactive': context.t(L10nKeys.inactive),
+          },
+          onChanged: onStatusChanged,
+        ),
+        _MemberFilterDropdown(
+          label: context.t(L10nKeys.subscriptionStatus),
+          value: subscriptionFilter,
+          items: const {
+            'all': 'All',
+            'active': 'Active',
+            'expiringSoon': 'Expiring soon',
+            'expired': 'Expired',
+            'partial': 'Partial',
+            'unpaid': 'Unpaid',
+            'none': 'No subscription',
+          },
+          onChanged: onSubscriptionChanged,
+        ),
+        _MemberFilterDropdown(
+          label: context.t(L10nKeys.accessStatus),
+          value: accessFilter,
+          items: const {
+            'all': 'All',
+            'active': 'Active',
+            'disabled': 'Disabled',
+            'lost': 'Lost',
+            'replaced': 'Replaced',
+            'not_assigned': 'Not assigned',
+          },
+          onChanged: onAccessChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _MemberFilterDropdown extends StatelessWidget {
+  const _MemberFilterDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final Map<String, String> items;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width < 700 ? 150 : 190,
+      child: DropdownButtonFormField<String>(
+        initialValue: value,
+        isExpanded: true,
+        dropdownColor: card2Dark,
+        style: const TextStyle(color: ApexColors.textSecondary, fontSize: 12),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle:
+              const TextStyle(color: ApexColors.textMuted, fontSize: 11),
+          filled: true,
+          fillColor: cardDark,
+          border: ApexDecorations.inputBorder(),
+          enabledBorder: ApexDecorations.inputBorder(),
+          focusedBorder: ApexDecorations.inputBorder(gold),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        items: items.entries
+            .map(
+              (entry) => DropdownMenuItem<String>(
+                value: entry.key,
+                child: Text(entry.value, overflow: TextOverflow.ellipsis),
+              ),
+            )
+            .toList(),
+        onChanged: onChanged,
+      ),
     );
   }
 }
@@ -161,7 +400,7 @@ class _AddMemberButton extends StatelessWidget {
       onPressed: onPressed,
       icon: const Icon(Icons.person_add_alt_1_rounded, size: 17),
       label: ApexText(
-        compact ? 'Add' : 'Add Member',
+        compact ? context.t(L10nKeys.add) : context.t(L10nKeys.addMember),
         fontSize: 12,
         color: const Color(0xFF080808),
         fontWeight: FontWeight.w700,
@@ -316,8 +555,11 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
-                        child: GoldHeading('Add Member', fontSize: 18),
+                      Expanded(
+                        child: GoldHeading(
+                          context.t(L10nKeys.addMember),
+                          fontSize: 18,
+                        ),
                       ),
                       IconButton(
                         tooltip: 'Close',
@@ -930,15 +1172,16 @@ class _MemberCardState extends State<_MemberCard> {
     final isMobile = MediaQuery.of(context).size.width < 700;
     final subscriptionState = EffectiveSubscriptionState.fromMember(m);
     final memberStatus = m.status.trim().toLowerCase() == 'active'
-        ? 'Active'
-        : 'Inactive';
+        ? context.t(L10nKeys.active)
+        : context.t(L10nKeys.inactive);
     final memberStatusColor =
-        memberStatus == 'Active' ? greenSuccess : redAlert;
+        m.status.trim().toLowerCase() == 'active' ? greenSuccess : redAlert;
     final accessLabel = memberAccessStatusLabel(m);
     final accessColor = memberAccessStatusColor(m);
     final planName = (m.currentPlanName ?? '').trim().isEmpty
         ? m.plan
         : m.currentPlanName!.trim();
+    final phone = (m.phone ?? '').trim().isEmpty ? 'No phone' : m.phone!.trim();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -991,10 +1234,19 @@ class _MemberCardState extends State<_MemberCard> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         ApexText(
-                          m.last,
+                          phone,
                           fontSize: isMobile ? 10 : 11,
-                          color: const Color(0xFF555555),
+                          color: ApexColors.textSecondary,
                         ),
+                        if (isMobile)
+                          ApexBadge(
+                            text: planName,
+                            color: planName == 'Elite'
+                                ? gold
+                                : planName == 'Premium'
+                                    ? blueInfo
+                                    : ApexColors.secondary,
+                          ),
                         if (isMobile)
                           ApexBadge(
                             text: subscriptionState.label,
@@ -1047,6 +1299,14 @@ class _MemberCardState extends State<_MemberCard> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        ApexText(
+                          phone,
+                          fontSize: 11,
+                          color: ApexColors.textSecondary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(width: 10),
                         ApexBadge(
                           text: accessLabel,
                           color: accessColor,

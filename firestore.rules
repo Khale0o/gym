@@ -22,11 +22,28 @@ service cloud.firestore {
       return signedIn() && userStatus() == 'active';
     }
 
+    function isPlatformOwner() {
+      return isActiveUser() && userRole() == 'platformOwner';
+    }
+
     function userGymId() {
       return signedIn() ? userProfile().defaultGymId : null;
     }
 
+    function gymDoc(gymId) {
+      return get(/databases/$(database)/documents/gyms/$(gymId)).data;
+    }
+
+    function isUsableGym(gymId) {
+      return !('tenantStatus' in gymDoc(gymId)) ||
+        gymDoc(gymId).tenantStatus == 'active';
+    }
+
     function isGymUser(gymId) {
+      return isActiveUser() && userGymId() == gymId && isUsableGym(gymId);
+    }
+
+    function canReadOwnGymDoc(gymId) {
       return isActiveUser() && userGymId() == gymId;
     }
 
@@ -91,6 +108,49 @@ service cloud.firestore {
     function hasOnlyAffected(allowedFields) {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(allowedFields);
+    }
+
+    function tenantControlFields() {
+      return [
+        'tenantStatus',
+        'suspendedAt',
+        'suspendedBy',
+        'suspensionReason',
+        'resumedAt',
+        'resumedBy',
+        'cancellationReason'
+      ];
+    }
+
+    function tenantUpdateFields() {
+      return [
+        'tenantStatus',
+        'suspendedAt',
+        'suspendedBy',
+        'suspensionReason',
+        'resumedAt',
+        'resumedBy',
+        'cancellationReason',
+        'updatedAt',
+        'updatedBy'
+      ];
+    }
+
+    function isSafeTenantStatusUpdate() {
+      return isPlatformOwner() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(tenantUpdateFields()) &&
+        request.resource.data.tenantStatus in [
+          'active',
+          'suspended',
+          'cancelled'
+        ] &&
+        request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function doesNotAffectTenantControl() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(tenantControlFields());
     }
 
     function allowedUserCreateKeys() {
@@ -240,8 +300,9 @@ service cloud.firestore {
     }
 
     match /gyms/{gymId} {
-      allow read: if isGymUser(gymId);
-      allow update: if isGymUser(gymId) && isOwnerOrAdmin();
+      allow read: if isPlatformOwner() || canReadOwnGymDoc(gymId);
+      allow update: if isSafeTenantStatusUpdate() ||
+        (isGymUser(gymId) && isOwnerOrAdmin() && doesNotAffectTenantControl());
       allow create, delete: if false;
 
       match /members/{memberId} {
