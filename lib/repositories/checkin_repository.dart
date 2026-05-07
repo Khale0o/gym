@@ -426,6 +426,11 @@ class CheckInRepository {
     if (status != 'active') {
       return CheckInValidationResult.blocked('Member is inactive.');
     }
+    if (accountStatus == 'archived') {
+      return CheckInValidationResult.blocked(
+        'You cannot check in because this member account is archived.',
+      );
+    }
     if (accountStatus != null &&
         accountStatus.isNotEmpty &&
         accountStatus != 'active') {

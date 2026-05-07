@@ -817,6 +817,8 @@ class _QuickActions extends ConsumerWidget {
         activeProfile && RoleCapabilities.canEditMember(profile.role);
     final canManageMemberAccess =
         activeProfile && RoleCapabilities.canManageMemberAccess(profile.role);
+    final canArchiveMember =
+        activeProfile && RoleCapabilities.canArchiveMember(profile.role);
     final canOpenEditor = canEditMember || canManageMemberAccess;
 
     return ApexCard(
@@ -865,6 +867,23 @@ class _QuickActions extends ConsumerWidget {
                     side: const BorderSide(color: borderDark),
                   ),
                 ),
+              if (canArchiveMember &&
+                  (member.accountStatus ?? '').trim().toLowerCase() !=
+                      'archived')
+                OutlinedButton.icon(
+                  onPressed: () => _showArchiveMemberDialog(
+                    context: context,
+                    ref: ref,
+                    gymId: gymId,
+                    member: member,
+                  ),
+                  icon: const Icon(Icons.archive_rounded, size: 16),
+                  label: Text(context.t(L10nKeys.archiveMember)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: orangeWarning,
+                    side: const BorderSide(color: orangeWarning),
+                  ),
+                ),
             ],
           ),
         ],
@@ -894,6 +913,178 @@ class _QuickActions extends ConsumerWidget {
       ref.invalidate(gymMemberByIdProvider(member.id));
     });
   }
+
+  Future<void> _showArchiveMemberDialog({
+    required BuildContext context,
+    required WidgetRef ref,
+    required String gymId,
+    required Member member,
+  }) async {
+    final archived = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _ArchiveMemberDialog(
+        memberName: member.name,
+        onArchive: (reason) {
+          final user = ref.read(currentAuthUserProvider);
+          if (user == null) {
+            throw StateError('Signed-in user is required.');
+          }
+          return ref.read(memberRepositoryProvider).archiveMember(
+                gymId: gymId,
+                memberId: member.id,
+                reason: reason,
+                performedByUid: user.uid,
+              );
+        },
+      ),
+    );
+    if (archived == true && context.mounted) {
+      ref.invalidate(gymMembersProvider);
+      ref.invalidate(gymMemberByIdProvider(member.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.t(L10nKeys.memberArchivedSuccess)),
+          backgroundColor: greenSuccess,
+        ),
+      );
+    }
+  }
+}
+
+class _ArchiveMemberDialog extends StatefulWidget {
+  const _ArchiveMemberDialog({
+    required this.memberName,
+    required this.onArchive,
+  });
+
+  final String memberName;
+  final Future<void> Function(String reason) onArchive;
+
+  @override
+  State<_ArchiveMemberDialog> createState() => _ArchiveMemberDialogState();
+}
+
+class _ArchiveMemberDialogState extends State<_ArchiveMemberDialog> {
+  final _reasonController = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() => _error = context.t(L10nKeys.reasonRequired));
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      await widget.onArchive(reason);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = friendlyFirestoreErrorMessage(
+          error,
+          fallback: 'Could not archive member. Please try again.',
+        );
+      });
+    } on StateError catch (error) {
+      if (!mounted) return;
+      setState(() => _error = _cleanStateError(error));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not archive member. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: cardDark,
+      title: GoldHeading(context.t(L10nKeys.archiveMember), fontSize: 18),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ApexText(
+            '${context.t(L10nKeys.deactivateMember)}: ${widget.memberName}',
+            color: ApexColors.textPrimary,
+          ),
+          const SizedBox(height: 8),
+          ApexText(
+            context.t(L10nKeys.archivePreservesHistory),
+            color: ApexColors.textSecondary,
+            fontSize: 12,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reasonController,
+            enabled: !_saving,
+            minLines: 2,
+            maxLines: 4,
+            style: const TextStyle(color: ApexColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.t(L10nKeys.suspensionReason),
+              errorText: _error,
+              filled: true,
+              fillColor: bgDark,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: Text(context.t(L10nKeys.cancel)),
+        ),
+        FilledButton.icon(
+          onPressed: _saving ? null : _submit,
+          icon: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.archive_rounded, size: 16),
+          label: Text(
+            _saving
+                ? context.t(L10nKeys.saving)
+                : context.t(L10nKeys.archiveMember),
+          ),
+          style: FilledButton.styleFrom(backgroundColor: orangeWarning),
+        ),
+      ],
+    );
+  }
+}
+
+String _cleanStateError(StateError error) {
+  final message = error.message;
+  if (message.isEmpty) {
+    return 'Could not archive member. Please try again.';
+  }
+  return message;
 }
 
 class _EditMemberSheet extends ConsumerStatefulWidget {

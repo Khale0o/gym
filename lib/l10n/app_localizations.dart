@@ -281,6 +281,12 @@ class L10nKeys {
   static const gymSuspendedSuccess = 'gymSuspendedSuccess';
   static const gymResumedSuccess = 'gymResumedSuccess';
   static const gymCancelledSuccess = 'gymCancelledSuccess';
+  static const archiveMember = 'archiveMember';
+  static const deactivateMember = 'deactivateMember';
+  static const memberArchivedSuccess = 'memberArchivedSuccess';
+  static const memberArchivedMessage = 'memberArchivedMessage';
+  static const archivedCheckinBlocked = 'archivedCheckinBlocked';
+  static const archivePreservesHistory = 'archivePreservesHistory';
 }
 
 class AppLocalizations {
@@ -581,6 +587,14 @@ const _localizedValues = <AppLanguage, Map<String, String>>{
     L10nKeys.gymSuspendedSuccess: 'Gym suspended successfully.',
     L10nKeys.gymResumedSuccess: 'Gym resumed successfully.',
     L10nKeys.gymCancelledSuccess: 'Gym cancelled successfully.',
+    L10nKeys.archiveMember: 'Archive Member',
+    L10nKeys.deactivateMember: 'Deactivate Member',
+    L10nKeys.memberArchivedSuccess: 'Member archived successfully.',
+    L10nKeys.memberArchivedMessage: 'This member has been archived.',
+    L10nKeys.archivedCheckinBlocked:
+        'You cannot check in because this member account is archived.',
+    L10nKeys.archivePreservesHistory:
+        'This will not delete payments, attendance, or history.',
   },
   AppLanguage.arabicEgyptian: {
     L10nKeys.dashboard: 'لوحة التحكم',
@@ -853,5 +867,13 @@ const _localizedValues = <AppLanguage, Map<String, String>>{
     L10nKeys.gymSuspendedSuccess: 'تم إيقاف الجيم بنجاح.',
     L10nKeys.gymResumedSuccess: 'تم تشغيل الجيم بنجاح.',
     L10nKeys.gymCancelledSuccess: 'تم إلغاء الجيم بنجاح.',
+    L10nKeys.archiveMember: 'أرشفة العضو',
+    L10nKeys.deactivateMember: 'إيقاف العضو',
+    L10nKeys.memberArchivedSuccess: 'تمت أرشفة العضو بنجاح.',
+    L10nKeys.memberArchivedMessage: 'العضو ده متأرشف.',
+    L10nKeys.archivedCheckinBlocked:
+        'مينفعش تسجل دخول لأن حساب العضو متأرشف.',
+    L10nKeys.archivePreservesHistory:
+        'الإجراء ده مش هيحذف المدفوعات أو الحضور أو السجل.',
   },
 };

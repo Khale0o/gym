@@ -295,9 +295,14 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen>
       return message.substring(badStatePrefix.length);
     }
     if (message.startsWith(stateErrorPrefix)) {
-      return message.substring(stateErrorPrefix.length);
+      final clean = message.substring(stateErrorPrefix.length);
+      return clean == 'You cannot check in because this member account is archived.'
+          ? context.t(L10nKeys.archivedCheckinBlocked)
+          : clean;
     }
-    return message;
+    return message == 'You cannot check in because this member account is archived.'
+        ? context.t(L10nKeys.archivedCheckinBlocked)
+        : message;
   }
 
   String _friendlyFirestoreError(FirebaseException error) {

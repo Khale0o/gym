@@ -1111,6 +1111,8 @@ String _occupancyStatus(int? percent) {
 
 String _cardReasonLabel(String reason) {
   switch (reason) {
+    case 'This member has been archived.':
+      return 'This member has been archived';
     case 'Member profile is inactive.':
       return 'Member inactive';
     case 'Member account is inactive.':

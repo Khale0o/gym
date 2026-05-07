@@ -51,7 +51,9 @@ MemberAccessEligibility evaluateMemberAccessEligibility(Member member) {
     reasons.add('Member profile is inactive.');
   }
 
-  if (accountStatus.isNotEmpty && accountStatus != 'active') {
+  if (accountStatus == 'archived') {
+    reasons.add('This member has been archived.');
+  } else if (accountStatus.isNotEmpty && accountStatus != 'active') {
     reasons.add('Member account is inactive.');
   }
 

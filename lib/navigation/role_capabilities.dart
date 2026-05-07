@@ -35,6 +35,11 @@ class RoleCapabilities {
         _normalized(role) == AppRoles.reception;
   }
 
+  static bool canArchiveMember(String role) {
+    return _normalized(role) == AppRoles.owner ||
+        _normalized(role) == AppRoles.admin;
+  }
+
   static bool canManageMemberAccess(String role) {
     return _normalized(role) == AppRoles.owner ||
         _normalized(role) == AppRoles.admin ||

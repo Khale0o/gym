@@ -12,7 +12,13 @@ class MemberRepository {
         .membersCollection(gymId)
         .orderBy('fullName')
         .snapshots()
-        .map((snap) => snap.docs.map(Member.fromFirestore).toList());
+        .map((snap) => snap.docs.where((doc) {
+              final data = doc.data();
+              final accountStatus =
+                  (data['accountStatus'] as String?)?.trim().toLowerCase();
+              return accountStatus != 'archived' &&
+                  !data.containsKey('deletedAt');
+            }).map(Member.fromFirestore).toList());
   }
 
   Future<Member?> getMember(String gymId, String memberId) async {
@@ -229,6 +235,47 @@ class MemberRepository {
       return null;
     }
     return Member.fromFirestore(unique.values.first);
+  }
+
+  Future<void> archiveMember({
+    required String gymId,
+    required String memberId,
+    required String reason,
+    required String performedByUid,
+  }) async {
+    final trimmedGymId = gymId.trim();
+    final trimmedMemberId = memberId.trim();
+    final trimmedReason = reason.trim();
+    final trimmedPerformedBy = performedByUid.trim();
+
+    if (trimmedGymId.isEmpty) {
+      throw StateError('Gym ID is required.');
+    }
+    if (trimmedMemberId.isEmpty) {
+      throw StateError('Member ID is required.');
+    }
+    if (trimmedReason.isEmpty) {
+      throw StateError('Reason is required.');
+    }
+    if (trimmedPerformedBy.isEmpty) {
+      throw StateError('Signed-in user is required.');
+    }
+
+    final memberRef = _paths.memberDoc(trimmedGymId, trimmedMemberId);
+    final memberSnap = await memberRef.get();
+    if (!memberSnap.exists) {
+      throw StateError('Member not found.');
+    }
+
+    final now = FieldValue.serverTimestamp();
+    await memberRef.update({
+      'status': 'inactive',
+      'accountStatus': 'archived',
+      'deletedAt': now,
+      'deletedBy': trimmedPerformedBy,
+      'deleteReason': trimmedReason,
+      'updatedAt': now,
+    });
   }
 
   static String? normalizeAccessIdentifier(String? value) {

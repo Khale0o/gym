@@ -153,6 +153,43 @@ service cloud.firestore {
         .hasAny(tenantControlFields());
     }
 
+    function memberArchiveFields() {
+      return [
+        'status',
+        'accountStatus',
+        'deletedAt',
+        'deletedBy',
+        'deleteReason',
+        'updatedAt'
+      ];
+    }
+
+    function memberArchiveControlFields() {
+      return [
+        'accountStatus',
+        'deletedAt',
+        'deletedBy',
+        'deleteReason'
+      ];
+    }
+
+    function isSafeMemberArchiveUpdate(gymId) {
+      return isGymUser(gymId) &&
+        isOwnerOrAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(memberArchiveFields()) &&
+        request.resource.data.status == 'inactive' &&
+        request.resource.data.accountStatus == 'archived' &&
+        request.resource.data.deletedBy == request.auth.uid &&
+        request.resource.data.deleteReason is string &&
+        request.resource.data.deleteReason != '';
+    }
+
+    function doesNotAffectMemberArchiveControl() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(memberArchiveControlFields());
+    }
+
     function allowedUserCreateKeys() {
       return [
         'role',
@@ -314,7 +351,11 @@ service cloud.firestore {
         allow create: if isGymUser(gymId) && isOwnerAdminReception();
 
         allow update: if (
-          isGymUser(gymId) && isOwnerAdminReception()
+          isSafeMemberArchiveUpdate(gymId)
+        ) || (
+          isGymUser(gymId) &&
+          isOwnerAdminReception() &&
+          doesNotAffectMemberArchiveControl()
         ) || (
           signedIn() &&
           request.auth.uid == request.resource.data.authUid &&
