@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gymsaas/core/firestore_error_messages.dart';
 import 'package:gymsaas/core/theme.dart';
+import 'package:gymsaas/l10n/app_localizations.dart';
 import 'package:gymsaas/models/staff.dart';
 import 'package:gymsaas/models/staff_invite.dart';
 import 'package:gymsaas/navigation/role_capabilities.dart';
@@ -67,7 +68,11 @@ class StaffManagementScreen extends ConsumerWidget {
               Expanded(
                 child: TabBarView(
                   children: [
-                    _LinkedStaffSection(staffAsync: staffAsync),
+                    _LinkedStaffSection(
+                      staffAsync: staffAsync,
+                      currentRole: profile?.role ?? '',
+                      canManageStaff: canManageStaff,
+                    ),
                     _PendingInvitesSection(
                       invitesAsync: invitesAsync,
                       currentRole: profile?.role ?? '',
@@ -122,13 +127,19 @@ class _InviteStaffButton extends StatelessWidget {
   }
 }
 
-class _LinkedStaffSection extends StatelessWidget {
-  const _LinkedStaffSection({required this.staffAsync});
+class _LinkedStaffSection extends ConsumerWidget {
+  const _LinkedStaffSection({
+    required this.staffAsync,
+    required this.currentRole,
+    required this.canManageStaff,
+  });
 
   final AsyncValue<List<Staff>> staffAsync;
+  final String currentRole;
+  final bool canManageStaff;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return staffAsync.when(
       loading: () => const _LoadingList(),
       error: (error, _) => Center(
@@ -145,10 +156,64 @@ class _LinkedStaffSection extends StatelessWidget {
         return ListView.separated(
           itemCount: staff.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, index) => _StaffCard(staff: staff[index]),
+          itemBuilder: (_, index) {
+            final item = staff[index];
+            final authUser = ref.watch(currentAuthUserProvider);
+            final isSelf = item.id == authUser?.uid ||
+                (item.authUid ?? '').trim() == authUser?.uid;
+            final canArchive = canManageStaff &&
+                !isSelf &&
+                RoleCapabilities.canArchiveStaff(currentRole);
+            return _StaffCard(
+              staff: item,
+              canArchive: canArchive,
+              onArchive: () => _showArchiveStaffDialog(context, ref, item),
+            );
+          },
         );
       },
     );
+  }
+
+  Future<void> _showArchiveStaffDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Staff staff,
+  ) async {
+    final gymId = ref.read(currentGymIdProvider)?.trim();
+    if (gymId == null || gymId.isEmpty) {
+      _showSnack(context, 'No gym is selected for this user profile.', redAlert);
+      return;
+    }
+
+    final archived = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _ArchiveStaffDialog(
+        staffName: staff.fullName,
+        onArchive: (reason) {
+          final user = ref.read(currentAuthUserProvider);
+          if (user == null) {
+            throw StateError('Signed-in user is required.');
+          }
+          return ref.read(staffRepositoryProvider).archiveStaff(
+                gymId: gymId,
+                staffId: staff.id,
+                reason: reason,
+                performedByUid: user.uid,
+              );
+        },
+      ),
+    );
+    if (archived == true && context.mounted) {
+      ref.invalidate(gymStaffProvider);
+      ref.invalidate(gymStaffByIdProvider(staff.id));
+      _showSnack(
+        context,
+        context.t(L10nKeys.staffArchivedSuccess),
+        greenSuccess,
+      );
+    }
   }
 }
 
@@ -246,9 +311,15 @@ class _PendingInvitesSection extends ConsumerWidget {
 }
 
 class _StaffCard extends StatelessWidget {
-  const _StaffCard({required this.staff});
+  const _StaffCard({
+    required this.staff,
+    required this.canArchive,
+    required this.onArchive,
+  });
 
   final Staff staff;
+  final bool canArchive;
+  final VoidCallback onArchive;
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +341,15 @@ class _StaffCard extends StatelessWidget {
                 text: hasLogin ? 'Login Enabled' : 'Login Not Linked',
                 color: hasLogin ? greenSuccess : orangeWarning,
               ),
+              if (canArchive) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: context.t(L10nKeys.archiveStaff),
+                  onPressed: onArchive,
+                  icon: const Icon(Icons.archive_rounded, size: 18),
+                  color: orangeWarning,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -284,6 +364,133 @@ class _StaffCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ArchiveStaffDialog extends StatefulWidget {
+  const _ArchiveStaffDialog({
+    required this.staffName,
+    required this.onArchive,
+  });
+
+  final String staffName;
+  final Future<void> Function(String reason) onArchive;
+
+  @override
+  State<_ArchiveStaffDialog> createState() => _ArchiveStaffDialogState();
+}
+
+class _ArchiveStaffDialogState extends State<_ArchiveStaffDialog> {
+  final _reasonController = TextEditingController();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() => _error = context.t(L10nKeys.reasonRequired));
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      await widget.onArchive(reason);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = friendlyFirestoreErrorMessage(
+          error,
+          fallback: 'Could not archive staff. Please try again.',
+        );
+      });
+    } on StateError catch (error) {
+      if (!mounted) return;
+      setState(() => _error = _cleanStateError(error));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not archive staff. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: cardDark,
+      title: GoldHeading(context.t(L10nKeys.archiveStaff), fontSize: 18),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ApexText(
+            '${context.t(L10nKeys.deactivateStaff)}: ${widget.staffName}',
+            color: ApexColors.textPrimary,
+          ),
+          const SizedBox(height: 8),
+          ApexText(
+            context.t(L10nKeys.staffArchivePreservesHistory),
+            color: ApexColors.textSecondary,
+            fontSize: 12,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reasonController,
+            enabled: !_saving,
+            minLines: 2,
+            maxLines: 4,
+            style: const TextStyle(color: ApexColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.t(L10nKeys.suspensionReason),
+              errorText: _error,
+              filled: true,
+              fillColor: bgDark,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: Text(context.t(L10nKeys.cancel)),
+        ),
+        FilledButton.icon(
+          onPressed: _saving ? null : _submit,
+          icon: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.archive_rounded, size: 16),
+          label: Text(
+            _saving
+                ? context.t(L10nKeys.saving)
+                : context.t(L10nKeys.archiveStaff),
+          ),
+          style: FilledButton.styleFrom(backgroundColor: orangeWarning),
+        ),
+      ],
     );
   }
 }
@@ -843,6 +1050,14 @@ void _showSnack(BuildContext context, String message, Color color) {
       backgroundColor: color,
     ),
   );
+}
+
+String _cleanStateError(StateError error) {
+  final message = error.message;
+  if (message.isEmpty) {
+    return 'Could not archive staff. Please try again.';
+  }
+  return message;
 }
 
 String _roleLabel(String role) {

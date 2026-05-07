@@ -287,6 +287,13 @@ class L10nKeys {
   static const memberArchivedMessage = 'memberArchivedMessage';
   static const archivedCheckinBlocked = 'archivedCheckinBlocked';
   static const archivePreservesHistory = 'archivePreservesHistory';
+  static const archiveStaff = 'archiveStaff';
+  static const deactivateStaff = 'deactivateStaff';
+  static const staffArchivedSuccess = 'staffArchivedSuccess';
+  static const staffArchivedMessage = 'staffArchivedMessage';
+  static const cannotArchiveSelf = 'cannotArchiveSelf';
+  static const cannotArchiveLastOwner = 'cannotArchiveLastOwner';
+  static const staffArchivePreservesHistory = 'staffArchivePreservesHistory';
 }
 
 class AppLocalizations {
@@ -595,6 +602,14 @@ const _localizedValues = <AppLanguage, Map<String, String>>{
         'You cannot check in because this member account is archived.',
     L10nKeys.archivePreservesHistory:
         'This will not delete payments, attendance, or history.',
+    L10nKeys.archiveStaff: 'Archive Staff',
+    L10nKeys.deactivateStaff: 'Deactivate Staff',
+    L10nKeys.staffArchivedSuccess: 'Staff archived successfully.',
+    L10nKeys.staffArchivedMessage: 'This staff account has been archived.',
+    L10nKeys.cannotArchiveSelf: 'You cannot archive yourself.',
+    L10nKeys.cannotArchiveLastOwner: 'You cannot archive the last owner.',
+    L10nKeys.staffArchivePreservesHistory:
+        'This will not delete history or audit records.',
   },
   AppLanguage.arabicEgyptian: {
     L10nKeys.dashboard: 'لوحة التحكم',
@@ -875,5 +890,17 @@ const _localizedValues = <AppLanguage, Map<String, String>>{
         'مينفعش تسجل دخول لأن حساب العضو متأرشف.',
     L10nKeys.archivePreservesHistory:
         'الإجراء ده مش هيحذف المدفوعات أو الحضور أو السجل.',
+    L10nKeys.archiveStaff: '\u0623\u0631\u0634\u0641\u0629 \u0627\u0644\u0645\u0648\u0638\u0641',
+    L10nKeys.deactivateStaff: '\u0625\u064a\u0642\u0627\u0641 \u0627\u0644\u0645\u0648\u0638\u0641',
+    L10nKeys.staffArchivedSuccess:
+        '\u062a\u0645\u062a \u0623\u0631\u0634\u0641\u0629 \u0627\u0644\u0645\u0648\u0638\u0641 \u0628\u0646\u062c\u0627\u062d.',
+    L10nKeys.staffArchivedMessage:
+        '\u062d\u0633\u0627\u0628 \u0627\u0644\u0645\u0648\u0638\u0641 \u062f\u0647 \u0645\u062a\u0623\u0631\u0634\u0641.',
+    L10nKeys.cannotArchiveSelf:
+        '\u0645\u064a\u0646\u0641\u0639\u0634 \u062a\u0623\u0631\u0634\u0641 \u0646\u0641\u0633\u0643.',
+    L10nKeys.cannotArchiveLastOwner:
+        '\u0645\u064a\u0646\u0641\u0639\u0634 \u062a\u0623\u0631\u0634\u0641 \u0622\u062e\u0631 \u0645\u0627\u0644\u0643 \u0644\u0644\u062c\u064a\u0645.',
+    L10nKeys.staffArchivePreservesHistory:
+        '\u0627\u0644\u0625\u062c\u0631\u0627\u0621 \u062f\u0647 \u0645\u0634 \u0647\u064a\u062d\u0630\u0641 \u0627\u0644\u0633\u062c\u0644 \u0623\u0648 \u0627\u0644\u0645\u0631\u0627\u062c\u0639\u0629.',
   },
 };

@@ -56,6 +56,10 @@ class RoleCapabilities {
         _normalized(role) == AppRoles.admin;
   }
 
+  static bool canArchiveStaff(String role) {
+    return canManageStaff(role);
+  }
+
   static List<String> invitableStaffRoles(String role) {
     switch (_normalized(role)) {
       case AppRoles.owner:
